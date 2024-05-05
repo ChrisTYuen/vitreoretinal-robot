@@ -8,7 +8,7 @@ Teleoperated surgical robotic system to assist surgeons in the Inner Limiting Me
 
 <p align="center">
   <img src="images/labeled_robot.png" height="300px" width="400px">
-  <img src="images/tip_detect.png" height="200px" width="8900px">
+  <img src="images/tip_detect.png" height="200px" width="600px">
 </p>
 
 ## Technologies Used
