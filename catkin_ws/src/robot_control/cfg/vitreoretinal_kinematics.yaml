@@ -1,0 +1,62 @@
+# simulation or setup settings
+"simulation": True
+"bionic_eye": True
+"set_eyeball": False
+"enable_sleep": True
+
+# Solver (DQ_QuadprogSolver=0, DQ_CPLEXSolver=1)
+"solver": 0
+
+# Light guide automation
+"lg_automation": True
+
+# For debug
+"print_time": False
+"print_error": False
+"print_datalog_time": False
+
+# eyeball
+"eyeball_radius": 0.012
+"port_angle": 30 # degrees
+"eyeground_radius": 0.005 # the Bionic-EyE retina size
+"radius_bias": 0. # The radius of work space is eyeground_radius - radius_bias
+"eyeground_plus_height": 0.002 # depents on the Bionic-EyE
+"trocar_outer_radius": 0.00025
+"trocar_inner_radius": 0.0002
+
+# Constraints
+"nd_rcm": 0.01
+"nd_trocar": 0.01
+"nd_eyeball": 0.01
+"nd_collision": 1.
+"nd_view": 1.
+"nd_limit": 1.
+"nd_plane": 1.
+"nd_cone": 0.1
+"nd_illumination": 0.1
+"nd_shadow": 1.
+"nd_tip": 0.01
+
+"d_safe_rcm": 0.003
+"d_safe_collision": 0.0005
+"d_safe_view": 0.1
+"d_safe_trocar": 0.005
+"d_safe_shadow": 0.0001
+"d_safe_tip": 0.015
+
+"tan_alpha": 0.88
+"tan_bias": 0.53
+
+
+
+"n_planar": 140
+"n_1_second": 150
+"n_2_linear": 100
+"fps": 150
+"damping_planar": 0.001
+"damping_1_second": 0.0005
+"damping_2_linear": 0.001
+"D_second_velocity_max": 0.002
+"beta": 0.99
+
+"insertion_distance": 0.005

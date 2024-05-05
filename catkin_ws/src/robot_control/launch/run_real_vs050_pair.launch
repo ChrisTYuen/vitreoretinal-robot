@@ -1,0 +1,9 @@
+<launch>
+
+<include file="$(find robot_control)/launch/real/sas_robot_driver_denso_vs050_1.launch"/>
+<include file="$(find robot_control)/launch/real/sas_robot_driver_denso_vs050_2.launch"/>
+
+<include file="$(find robot_control)/launch/shared/aisp_vs050_1.launch"/>
+<include file="$(find robot_control)/launch/shared/aisp_vs050_2.launch"/>
+
+</launch>

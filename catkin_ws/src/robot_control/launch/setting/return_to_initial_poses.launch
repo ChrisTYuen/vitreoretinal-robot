@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="robot_control" type="return_to_initial_poses.py" name="return_to_initial_poses"/>
+</launch>

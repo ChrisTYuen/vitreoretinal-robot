@@ -1,0 +1,18 @@
+# #if true, will use driver tool pose instead of current fkm model
+use_tool_pose: false
+###################################################
+# Temp for christian-san setup
+###################################################
+# arm1 light (right arm)
+arm1_end_effector_info_save_path: "$(find robot_calibration)/calibration_result/arm1_light_ee.yaml"
+arm1_calibration_data_namespace: "/robot/arm1_ee/"
+arm1_driver_namespace: "/vs050_1"  # Name must match the SAS robot driver namespace
+arm1_parameter_file_path: "$(find robot_control)/robots/denso_vs050_denso_11U473_light.json"  # factory calibration 
+arm1_parameter_save_path_calibrated: "$(find robot_control)/robots/denso_vs050_denso_11U473_light_calibrated.json"  # updated calibration 
+
+# arm2 instrument (left arm)
+arm2_end_effector_info_save_path: "$(find robot_calibration)/calibration_result/arm2_instrument_ee.yaml"
+arm2_calibration_data_namespace: "/robot/arm2_ee/"
+arm2_driver_namespace: "/vs050_2"  # Name must match the SAS robot driver namespace
+arm2_parameter_file_path: "$(find robot_control)/robots/denso_vs050_denso_11U483_instrument.json"  # factory calibration
+arm2_parameter_save_path_calibrated: "$(find robot_control)/robots/denso_vs050_denso_11U483_instrument_calibrated.json"  # updated calibration

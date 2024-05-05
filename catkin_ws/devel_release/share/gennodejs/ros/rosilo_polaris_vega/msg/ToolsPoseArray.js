@@ -1,0 +1,1 @@
+/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_polaris_vega/share/gennodejs/ros/rosilo_polaris_vega/msg/ToolsPoseArray.js

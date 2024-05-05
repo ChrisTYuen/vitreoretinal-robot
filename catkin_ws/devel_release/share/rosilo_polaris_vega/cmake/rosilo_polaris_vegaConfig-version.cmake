@@ -1,0 +1,1 @@
+/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_polaris_vega/share/rosilo_polaris_vega/cmake/rosilo_polaris_vegaConfig-version.cmake

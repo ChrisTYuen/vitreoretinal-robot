@@ -1,0 +1,14 @@
+<launch>
+<rosparam file="$(find robotic_control)/cfg/sas_operator_side_receiver.yaml" command="load" ns="sas_operator_side_receiver"/>
+<rosparam file="$(find robotic_control)/cfg/sas_patient_side_manager.yaml" command="load" ns="sas_patient_side_manager"/>
+<!-- <rosparam file="$(find robotic_control)/cfg/vitreoretinal_kinematics.yaml" command="load" ns="vitreoretinal_kinematics"/> -->
+
+<node pkg="sas_operator_side_receiver" type="sas_operator_side_receiver_udp_node" name="sas_operator_side_receiver"/>
+<node pkg="sas_patient_side_manager" type="sas_patient_side_manager_node" name="sas_patient_side_manager"/>
+
+<node pkg="robotic_control" type="store_node_unified_tele.py" name="store"/>
+<node pkg="sas_datalogger" type="sas_datalogger_node.py" name="sas_datalogger"/>
+
+<node pkg="robotic_control" type="tele_operation_unified.py" name="tele_controller"/>
+
+</launch>

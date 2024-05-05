@@ -1,0 +1,4 @@
+Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/share/microscopic_image_capture/cmake/microscopic_image_captureConfig.cmake
+Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/share/microscopic_image_capture/cmake/microscopic_image_captureConfig-version.cmake
+Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/pkgconfig/microscopic_image_capture.pc
+Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/microscopic_image_capture/microscopic_image_capture_node

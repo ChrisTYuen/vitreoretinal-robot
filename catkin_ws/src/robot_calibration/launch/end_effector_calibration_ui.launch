@@ -1,0 +1,10 @@
+<launch>
+    <node name="end_effector_calibration_ui"
+        pkg='robot_calibration' output="screen"
+        ns="robot_calibration"
+        type="end_effector_calibration_ui_node.py" required="true" >
+        <rosparam file="$(find robot_calibration)/cfg/end_effector_calibration_ui.yaml"
+            command="load" subst_value="true"/>
+    </node>
+</launch>
+

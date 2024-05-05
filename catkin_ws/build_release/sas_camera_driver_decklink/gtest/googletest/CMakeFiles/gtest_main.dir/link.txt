@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -O3 -DNDEBUG  -shared -Wl,-soname,libgtest_main.so -o ../lib/libgtest_main.so CMakeFiles/gtest_main.dir/src/gtest_main.cc.o  -Wl,-rpath,/home/yuki/git/ctyuen2022/catkin_ws/build_release/sas_camera_driver_decklink/gtest/lib ../lib/libgtest.so -lpthread 

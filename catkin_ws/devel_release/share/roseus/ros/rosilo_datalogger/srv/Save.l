@@ -1,0 +1,1 @@
+/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_datalogger/share/roseus/ros/rosilo_datalogger/srv/Save.l

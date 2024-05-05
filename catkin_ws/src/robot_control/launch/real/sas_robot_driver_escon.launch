@@ -1,0 +1,5 @@
+<launch>
+<node pkg="sas_robot_driver_escon" type="escon_control_node" name="escon_control_node">
+  <rosparam file="$(find robot_control)/cfg/sas_escon_controller.yaml" command="load"/>
+</node>
+</launch>

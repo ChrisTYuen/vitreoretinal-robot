@@ -1,0 +1,6 @@
+microscopic_image_capture
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/microscopic_image_capture/cmake.lock /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/./cmake.lock
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/microscopic_image_capture/share/microscopic_image_capture/cmake/microscopic_image_captureConfig.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/share/microscopic_image_capture/cmake/microscopic_image_captureConfig.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/microscopic_image_capture/share/microscopic_image_capture/cmake/microscopic_image_captureConfig-version.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/share/microscopic_image_capture/cmake/microscopic_image_captureConfig-version.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/microscopic_image_capture/lib/microscopic_image_capture/microscopic_image_capture_node /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/lib/microscopic_image_capture/microscopic_image_capture_node
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/microscopic_image_capture/lib/pkgconfig/microscopic_image_capture.pc /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/lib/pkgconfig/microscopic_image_capture.pc

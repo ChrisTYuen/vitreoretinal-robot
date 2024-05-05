@@ -1,0 +1,24 @@
+calibration_tip_t_file: "$(find pathology_calibration)/calibration_result/arm2_calibration_tip.yaml"
+# calibration_tip_param: "/arm2/joints/calibration/result"
+calibration_tip_defult_r: [1, 0, 0, 0]
+
+#z point opposite the blade of the knife
+knife_config1_t_file: "$(find pathology_calibration)/calibration_result/arm2_knife1.yaml"
+knife_config1_r_file: "$(find pathology_calibration)/calibration_result/arm2_knife1_rot.yaml"
+#z point with the blade of the knife
+knife_config2_t_file: "$(find pathology_calibration)/calibration_result/arm2_knife1.yaml"  # The translation is the same as config 1
+knife_config2_r_file: "$(find pathology_calibration)/calibration_result/arm2_knife2_rot.yaml"
+knife_config2_defult_r: [0.6536750442744915, -0.6515278952105694, 0.2736946874146954, -0.2707610687233278]
+
+knife_config3_defult_t: [-0.046669, -0.046669, 0.14]
+knife_config3_t_file: "$(find pathology_calibration)/calibration_result/arm2_knife3.yaml"
+knife_config3_r_file: "$(find pathology_calibration)/calibration_result/arm2_knife3_rot.yaml"
+knife_config3_defult_r: [-0.27061078927635235, 0.27058444580945074, 0.6532710372739808, -0.6532922854834571]
+
+twizer_config1_defult_t: [-0.1, 0, 0.15]
+# twizer_config1_t_file: "$(find pathology_calibration)/calibration_result/arm1_twizer1.yaml"
+# twizer_config1_defult_r: [0.70710678, 0, -0.70710678,  0]
+twizer_config1_defult_r: [0.5, -0.5, -0.5, 0.5]
+
+
+world_center_file: "$(find pathology_calibration)/calibration_result/world_center_ref.yaml"

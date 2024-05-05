@@ -1,0 +1,22 @@
+authors: []
+blacklist: []
+build_space: build_my_pkg_test
+catkin_make_args: []
+cmake_args: []
+devel_layout: linked
+devel_space: devel_my_pkg_test
+extend_path: null
+extends: null
+install: false
+install_space: install_my_pkg_test
+isolate_install: false
+jobs_args: []
+licenses:
+- TODO
+log_space: logs_my_pkg_test
+maintainers: []
+make_args: []
+source_space: src
+use_env_cache: false
+use_internal_make_jobserver: true
+whitelist: []

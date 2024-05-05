@@ -1,0 +1,8 @@
+prefix=/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_datalogger
+
+Name: rosilo_datalogger
+Description: Description of rosilo_datalogger
+Version: 0.0.0
+Cflags: -I/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_datalogger/include -I/home/yuki/git/ctyuen2022/catkin_ws/src/rosilo/rosilo_datalogger/include
+Libs: -L${prefix}/lib -lrosilo_datalogger
+Requires: roscpp rospy std_msgs message_runtime

@@ -1,0 +1,8 @@
+prefix=/home/yuki/git/ctyuen2022/catkin_ws/install_release
+
+Name: sas_camera_driver_decklink
+Description: Description of sas_camera_driver_decklink
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib 
+Requires: 

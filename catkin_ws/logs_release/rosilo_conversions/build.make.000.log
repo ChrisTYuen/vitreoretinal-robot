@@ -1,0 +1,6 @@
+[35m[1mScanning dependencies of target rosilo_conversions[0m
+[ 75%] [32mBuilding CXX object CMakeFiles/rosilo_conversions.dir/src/DQ_geometry_msgs_conversions.cpp.o[0m
+[ 75%] [32mBuilding CXX object CMakeFiles/rosilo_conversions.dir/src/std_std_msgs_conversions.cpp.o[0m
+[ 75%] [32mBuilding CXX object CMakeFiles/rosilo_conversions.dir/src/eigen3_std_conversions.cpp.o[0m
+[100%] [32m[1mLinking CXX shared library /home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_conversions/lib/librosilo_conversions.so[0m
+[100%] Built target rosilo_conversions

@@ -1,0 +1,25 @@
+vrep_port: 19997
+thread_sampling_time_nsec: 8000000
+
+master_manipulator_label_list: ["0_1","0_0"]
+vrep_camera_list: ["DefaultCamera","DefaultCamera"]
+vrep_x_list: ["instrument_tip","light_tip"]
+vrep_xd_list: ["xd1","xd2"]
+robot_kinematics_interface_prefix_list: ["/arm1_kinematics","/arm2_kinematics"]
+robot_gripper_interface_prefix_list: ["/arm1/gripper","/arm2/gripper"]
+gripper_invert_signal_list: [false,false]
+use_interpolator_list: [true,true]
+interpolator_speed_max_list: [50.,50.]
+interpolator_speed_min_list: [10.,10.]
+interpolator_speed_decay_seconds_list: [10.,10.]
+force_feedback_type_list: ["None","None"]
+leader_to_follower_quaternions: [[0.,0.,0.,0.],
+                                 [0.,0.,0.,0.]]
+# This value is replaced by the enviroment variable VREP_IP
+"vrep_ip": "0.0.0.0"
+
+#"r_max": 0.01
+#"r_guide": 0.005
+#"translation_over_guidance_priority": 0.5
+#"TGC_over_TGCircle_priority": 0.15
+

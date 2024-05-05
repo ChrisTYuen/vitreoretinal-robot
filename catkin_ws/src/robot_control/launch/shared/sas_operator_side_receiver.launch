@@ -1,0 +1,7 @@
+<launch>
+
+<rosparam file="$(find robot_control)/cfg/sas_operator_side_receiver.yaml" command="load" ns="sas_operator_side_receiver"/>
+
+<node pkg="sas_operator_side_receiver" type="sas_operator_side_receiver_udp_node" name="sas_operator_side_receiver"/>
+
+</launch>

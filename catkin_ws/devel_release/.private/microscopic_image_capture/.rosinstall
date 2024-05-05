@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/microscopic_image_capture/setup.sh

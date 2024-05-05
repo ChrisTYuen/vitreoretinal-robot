@@ -1,0 +1,7 @@
+rosilo/rosilo_robot_kinematics
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_robot_kinematics/cmake.lock /home/christian/.git/ctyuen2022/catkin_ws/devel/./cmake.lock
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_robot_kinematics/share/rosilo_robot_kinematics/cmake/rosilo_robot_kinematicsConfig-version.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel/share/rosilo_robot_kinematics/cmake/rosilo_robot_kinematicsConfig-version.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_robot_kinematics/share/rosilo_robot_kinematics/cmake/rosilo_robot_kinematicsConfig.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel/share/rosilo_robot_kinematics/cmake/rosilo_robot_kinematicsConfig.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_robot_kinematics/lib/librosilo_robot_kinematics.so /home/christian/.git/ctyuen2022/catkin_ws/devel/lib/librosilo_robot_kinematics.so
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_robot_kinematics/lib/python3/dist-packages/rosilo_robot_kinematics/__init__.py /home/christian/.git/ctyuen2022/catkin_ws/devel/lib/python3/dist-packages/rosilo_robot_kinematics/__init__.py
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_robot_kinematics/lib/pkgconfig/rosilo_robot_kinematics.pc /home/christian/.git/ctyuen2022/catkin_ws/devel/lib/pkgconfig/rosilo_robot_kinematics.pc

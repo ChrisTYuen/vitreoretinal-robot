@@ -1,0 +1,7 @@
+set(robot_calibration_SETUP_PY_SETUP_MODULE "distutils.core")
+set(robot_calibration_SETUP_PY_VERSION "0.0.0")
+set(robot_calibration_SETUP_PY_SCRIPTS "")
+set(robot_calibration_SETUP_PY_PACKAGES "robot_calibration")
+set(robot_calibration_SETUP_PY_PACKAGE_DIRS "scripts/robot_calibration")
+set(robot_calibration_SETUP_PY_MODULES "")
+set(robot_calibration_SETUP_PY_MODULE_DIRS "")

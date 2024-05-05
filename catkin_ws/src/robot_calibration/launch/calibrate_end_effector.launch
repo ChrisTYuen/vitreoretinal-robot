@@ -1,0 +1,10 @@
+<launch>
+    <include file="$(find robot_control)/launch/real/sas_robot_driver_denso_vs050_1.launch"/>
+    <include file="$(find robot_control)/launch/real/sas_robot_driver_6dof_denso_vs050_2.launch"/>
+    
+    <include file="$(find robot_control)/launch/shared/cal_aisp_vs050_1.launch"/>
+    <include file="$(find robot_control)/launch/shared/cal_aisp_vs050_2.launch"/>
+    
+    <include file="$(find robot_calibration)/launch/end_effector_calibration_ui.launch"/>
+</launch>
+

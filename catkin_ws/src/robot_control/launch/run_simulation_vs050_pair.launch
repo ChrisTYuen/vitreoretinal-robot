@@ -1,0 +1,6 @@
+<launch>
+
+<include file="$(find robot_control)/launch/simulation/sim_aisp_vs050_1.launch"/>
+<include file="$(find robot_control)/launch/simulation/sim_aisp_vs050_2.launch"/>
+
+</launch>

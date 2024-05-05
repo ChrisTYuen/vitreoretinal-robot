@@ -1,0 +1,1 @@
+/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/robot_control/share/robot_control/cmake/robot_controlConfig-version.cmake

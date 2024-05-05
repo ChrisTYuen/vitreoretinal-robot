@@ -1,0 +1,8 @@
+# 824 simulation PC
+"patient_side_ips": ["192.168.0.5"]
+"patient_side_ports": [2222]
+"operator_side_ips": ["192.168.0.7"]
+"operator_side_ports": [2222]
+
+"arm1_manipulator_ns": "0_1"
+"arm2_manipulator_ns": "0_0"

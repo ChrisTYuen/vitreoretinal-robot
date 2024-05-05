@@ -1,0 +1,8 @@
+prefix=/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/robot_control
+
+Name: robot_control
+Description: Description of robot_control
+Version: 0.0.0
+Cflags: -I/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/robot_control/include
+Libs: -L${prefix}/lib 
+Requires: rosilo_robot_kinematics rosilo_robot_driver rosilo_robot_driver_denso rosilo_conversions rosilo_clock roscpp rosilo_datalogger sas_robot_driver_denso sas_operator_side_receiver sas_robot_driver sas_common sas_conversions sas_clock roscpp sas_datalogger sas_operator_side_receiver

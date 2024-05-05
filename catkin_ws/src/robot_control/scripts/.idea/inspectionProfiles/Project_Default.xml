@@ -1,0 +1,48 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="PyPep8Inspection" enabled="true" level="WEAK WARNING" enabled_by_default="true">
+      <option name="ignoredErrors">
+        <list>
+          <option value="E111" />
+          <option value="E114" />
+          <option value="E501" />
+          <option value="E265" />
+          <option value="E262" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyPep8NamingInspection" enabled="false" level="WEAK WARNING" enabled_by_default="false">
+      <option name="ignoredErrors">
+        <list>
+          <option value="N806" />
+          <option value="N803" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="PyUnresolvedReferencesInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredIdentifiers">
+        <list>
+          <option value="dqrobotics.interfaces.vrep.DQ_VrepInterface" />
+          <option value="torch.utils.data" />
+          <option value="torch.backends.cudnn" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.translation" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.vec4" />
+          <option value="numpy.vstack" />
+          <option value="numpy.array" />
+          <option value="numpy.zeros" />
+          <option value="numpy.hstack" />
+          <option value="numpy.eye" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.k_" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.rotation" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.DQ" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.E_" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.dqrobotics" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.rosilo_robot_driver" />
+          <option value="rospy" />
+          <option value="numpy.linalg" />
+        </list>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

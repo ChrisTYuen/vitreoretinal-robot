@@ -1,0 +1,12 @@
+"thread_sampling_time_nsec": 4000000
+"use_real_robot": true
+"robot_driver_interface_node_prefixes": ["/vs050_2", "/escon_2"]
+#Vrep Parameters
+"vrep_port": 19999
+"vrep_dynamically_enabled": true
+"vrep_robot_joint_names": ["VS050_joint1#2","VS050_joint2#2","VS050_joint3#2","VS050_joint4#2","VS050_joint5#2","VS050_joint6#2", "VS050_joint7#2"]
+
+# This value is replaced by the enviroment variable VREP_IP
+"vrep_ip": "0.0.0.0"
+# This value is replaced by the enviroment variable ROBOT_2_JSON_PATH
+"robot_parameter_file_path": "dummy.json"

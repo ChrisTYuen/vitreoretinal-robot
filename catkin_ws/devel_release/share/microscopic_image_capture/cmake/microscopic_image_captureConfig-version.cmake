@@ -1,0 +1,1 @@
+/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/microscopic_image_capture/share/microscopic_image_capture/cmake/microscopic_image_captureConfig-version.cmake

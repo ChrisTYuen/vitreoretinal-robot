@@ -1,0 +1,5 @@
+aisp_ros_control_template
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/aisp_ros_control_template/cmake.lock /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/./cmake.lock
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/aisp_ros_control_template/share/aisp_ros_control_template/cmake/aisp_ros_control_templateConfig-version.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/share/aisp_ros_control_template/cmake/aisp_ros_control_templateConfig-version.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/aisp_ros_control_template/share/aisp_ros_control_template/cmake/aisp_ros_control_templateConfig.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/share/aisp_ros_control_template/cmake/aisp_ros_control_templateConfig.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/aisp_ros_control_template/lib/pkgconfig/aisp_ros_control_template.pc /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/lib/pkgconfig/aisp_ros_control_template.pc

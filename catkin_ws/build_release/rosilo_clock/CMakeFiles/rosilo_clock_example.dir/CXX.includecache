@@ -1,0 +1,24 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/yuki/git/ctyuen2022/catkin_ws/src/rosilo/rosilo_clock/include/rosilo_clock/rosilo_clock.h
+atomic
+-
+chrono
+-
+
+/home/yuki/git/ctyuen2022/catkin_ws/src/rosilo/rosilo_clock/src/rosilo_clock_example.cpp
+iostream
+-
+thread
+-
+chrono
+-
+rosilo_clock/rosilo_clock.h
+-
+

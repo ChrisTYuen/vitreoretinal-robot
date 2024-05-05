@@ -1,0 +1,8 @@
+prefix=/home/yuki/git/ctyuen2022/catkin_ws/install_release
+
+Name: rosilo_clock
+Description: Description of rosilo_clock
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib -lrosilo_clock
+Requires: roscpp rospy

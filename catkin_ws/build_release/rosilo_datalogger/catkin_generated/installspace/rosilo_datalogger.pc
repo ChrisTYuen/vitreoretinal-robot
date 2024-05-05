@@ -1,0 +1,8 @@
+prefix=/home/yuki/git/ctyuen2022/catkin_ws/install_release
+
+Name: rosilo_datalogger
+Description: Description of rosilo_datalogger
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib -lrosilo_datalogger
+Requires: roscpp rospy std_msgs message_runtime

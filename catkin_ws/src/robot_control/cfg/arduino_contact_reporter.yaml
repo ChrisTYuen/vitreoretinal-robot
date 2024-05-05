@@ -1,0 +1,6 @@
+serial_device_pid: 29987
+serial_device_vid: 6790
+# serial_port: "/dev/ttyUSB0"
+baud_rate: 19200
+
+pub_topic: "/arduino/contact"

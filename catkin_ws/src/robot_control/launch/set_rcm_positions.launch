@@ -1,0 +1,5 @@
+<launch>
+
+<node pkg="robot_control" type="set_rcm_positions.py" name="set_rcm_positions" required="True"/>
+
+</launch>

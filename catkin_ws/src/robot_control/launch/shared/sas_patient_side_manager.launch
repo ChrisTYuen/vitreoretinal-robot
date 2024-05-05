@@ -1,0 +1,8 @@
+<launch>
+<node pkg="sas_patient_side_manager" type="sas_patient_side_manager_node" name="sas_patient_side_manager">
+<rosparam file="$(find robot_control)/cfg/sas_patient_side_manager.yaml" command="load"/>
+<rosparam subst_value="true">
+    vrep_ip: $(env VREP_IP)
+</rosparam>
+</node>
+</launch>

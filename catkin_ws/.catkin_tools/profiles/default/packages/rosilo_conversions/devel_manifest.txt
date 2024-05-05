@@ -1,0 +1,7 @@
+rosilo/rosilo_conversions
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_conversions/cmake.lock /home/christian/.git/ctyuen2022/catkin_ws/devel/./cmake.lock
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_conversions/share/rosilo_conversions/cmake/rosilo_conversionsConfig-version.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel/share/rosilo_conversions/cmake/rosilo_conversionsConfig-version.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_conversions/share/rosilo_conversions/cmake/rosilo_conversionsConfig.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel/share/rosilo_conversions/cmake/rosilo_conversionsConfig.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_conversions/lib/librosilo_conversions.so /home/christian/.git/ctyuen2022/catkin_ws/devel/lib/librosilo_conversions.so
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_conversions/lib/python3/dist-packages/rosilo_conversions/__init__.py /home/christian/.git/ctyuen2022/catkin_ws/devel/lib/python3/dist-packages/rosilo_conversions/__init__.py
+/home/christian/.git/ctyuen2022/catkin_ws/devel/.private/rosilo_conversions/lib/pkgconfig/rosilo_conversions.pc /home/christian/.git/ctyuen2022/catkin_ws/devel/lib/pkgconfig/rosilo_conversions.pc

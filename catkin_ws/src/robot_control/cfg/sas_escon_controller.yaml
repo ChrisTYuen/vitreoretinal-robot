@@ -1,0 +1,61 @@
+#######################################
+###### ESCON_MANAGER
+#######################################
+ao_board_name: "PCI-1727U,BID#1"
+di_board_name: "PCI-1784,BID#1"
+do_board_name: "PCI-1784,BID#1"
+#######################################
+###### ESCON_CONFIG_ARRAY
+#######################################
+###### EXAMPLE ###########
+#	     id: "name"
+#        enc_board_name: "PCI-XXXX,BID#X"
+#        position_p: 0.X #Start with small value; positive voltage moves motor in positive voltage (check GUI), otherwise negative; Increase P slowly until a responsive motion occurs, but the motor does not vibrate.
+#        position_i: 0.X  #Only marginally increase a little at a time IF AND ONLY IF when you only have P, but the position gets close, but hangs. E.g. target is 1.0, but stops at 0.91
+#        position_d: 0.0  #Usually keep at 0 
+#        ao_channel: X  #Follow port channel sequence
+#        enc_channel: X  #Follow port channel sequence
+#        di_channel: X  #Follow port channel sequence
+#        pulses_per_revolution: XXXX  #Defined by the encoder and the reduction in gears. Set to 100, run program GUI, use voltage to rotate motor once, check rotation in GUI. E.g. GUI shows two rotions, but actual motor rotates once, then should be set to half at 50. 
+#        calibration_voltage: 2.5 # Voltage of controller at 0 (no turning signal)
+#        homed_sensor_state: 0
+#        position_min: -1200.0 #Minimum rotation
+#        position_max: 1200.0 #Maximum rotation
+#        voltage_min: 0.0
+#        voltage_max: 5.0
+
+escon_config_array:
+    -
+        id: "escon_1"
+        enc_board_name: "PCI-1784,BID#1"
+        position_p: 0.2
+        position_i: 0.0001
+        position_d: 0.0
+        ao_channel: 0
+        do_channel: 0       
+        enc_channel: 0
+        di_channel: 0
+        pulses_per_revolution: 9000
+        calibration_voltage: 2.5
+        homed_sensor_state: 0
+        position_min: -500.0
+        position_max: 3000.0  #60.00
+        voltage_min: 0.0
+        voltage_max: 5.0
+    -
+        id: "escon_2"
+        enc_board_name: "PCI-1784,BID#1"
+        position_p: -0.9
+        position_i: -0.0001
+        position_d: 0.0
+        ao_channel: 1
+        do_channel: 1   
+        enc_channel: 1
+        di_channel: 1
+        pulses_per_revolution: 11000
+        calibration_voltage: 2.5
+        homed_sensor_state: 1
+        position_min: -200.0
+        position_max: 200.0
+        voltage_min: 0.0
+        voltage_max: 5.0       

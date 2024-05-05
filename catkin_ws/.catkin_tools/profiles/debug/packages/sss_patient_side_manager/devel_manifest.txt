@@ -1,0 +1,7 @@
+smart_arm_stack/sss_patient_side_manager
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/sss_patient_side_manager/cmake.lock /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/./cmake.lock
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/sss_patient_side_manager/share/sss_patient_side_manager/cmake/sss_patient_side_managerConfig.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/share/sss_patient_side_manager/cmake/sss_patient_side_managerConfig.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/sss_patient_side_manager/share/sss_patient_side_manager/cmake/sss_patient_side_managerConfig-version.cmake /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/share/sss_patient_side_manager/cmake/sss_patient_side_managerConfig-version.cmake
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/sss_patient_side_manager/lib/python3/dist-packages/sss_patient_side_manager/__init__.py /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/lib/python3/dist-packages/sss_patient_side_manager/__init__.py
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/sss_patient_side_manager/lib/sss_patient_side_manager/sss_patient_side_manager_node /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/lib/sss_patient_side_manager/sss_patient_side_manager_node
+/home/christian/.git/ctyuen2022/catkin_ws/devel_debug/.private/sss_patient_side_manager/lib/pkgconfig/sss_patient_side_manager.pc /home/christian/.git/ctyuen2022/catkin_ws/devel_debug/lib/pkgconfig/sss_patient_side_manager.pc
