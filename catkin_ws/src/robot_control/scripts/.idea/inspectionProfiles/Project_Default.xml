@@ -38,7 +38,7 @@
           <option value="positioning.autonomous_positioning_IJMRCAS.DQ" />
           <option value="positioning.autonomous_positioning_IJMRCAS.E_" />
           <option value="positioning.autonomous_positioning_IJMRCAS.dqrobotics" />
-          <option value="positioning.autonomous_positioning_IJMRCAS.rosilo_robot_driver" />
+          <option value="positioning.autonomous_positioning_IJMRCAS.sas_robot_driver" />
           <option value="rospy" />
           <option value="numpy.linalg" />
         </list>

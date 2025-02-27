@@ -8,13 +8,12 @@ import numpy as np
 import cv2
 import albumentations as albu
 from tools import Parameters
-import shutil
 
 
 def test_confidence_map():
     parameters = Parameters.Parameters()
 
-    image_size = parameters.resize_size
+    image_size = [parameters.predict_size, parameters.predict_size]
     CLASSES = parameters.CLASSES
     ENCODER = parameters.ENCODER
     ENCODER_WEIGHTS = parameters.ENCODER_WEIGHTS

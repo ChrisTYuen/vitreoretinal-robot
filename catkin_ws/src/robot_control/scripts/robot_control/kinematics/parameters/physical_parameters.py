@@ -68,6 +68,8 @@ class SimulationSetup:
     lg_vrep_name = 'light_tip'
     si_xd_vrep_name = 'x1'
     lg_xd_vrep_name = 'x2'
+    td_1_vrep_name = 'tool_tip_d1'
+    td_2_vrep_name = 'tool_tip_d2'
     shadow_vrep_name = 'shadow_tip'
     eyeball_vrep_name = 'Eyeball'
     workspace_vrep_name = 'workspace'

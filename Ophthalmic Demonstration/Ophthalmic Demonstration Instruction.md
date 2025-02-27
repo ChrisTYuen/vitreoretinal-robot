@@ -13,7 +13,7 @@ The Ophthalmology System is currently under development and the instruction manu
 
 The forceps system can be buggy, so patience is key to diagnose these issues. Also ensure that the min and max positioning is correctly set. The wiring may also tangle if the forceps device rotates enough. It is best to unwind the wiring as it can cause tension on the wiring and soldering which may lead to open circuits.
 ### Initialization
-** **BE PREPARED TO TURN OFF THE FORCEPS VIA SWITCH** **<br>
+** **BE PREPARED TO TURN OFF THE FORCEPS VIA SWITCH** ** Reference Debugging section for more details.<br>
 **Launch the ROS node** <br>
 `roslaunch opthalmic_control oph_robot_driver_maxon.launch --screen` <br>
 On a fresh launch, `no initial values obtained.` will be displayed. Exit the program and relaunch so both channels are initialized.  <br><br>
@@ -24,9 +24,9 @@ Ensure this is closed once you control the forceps via script.<br><br>
 `rosparam delete /escon_initial_joint_poisitions`
 
 ### Debugging
-- **The forceps continuously spins** - This is due to the maxon controller having a calibration voltage of 2.5V. The voltage may stay at 5V and the "position" via check node may be increasing continuously. Try restting the initial positions and then turn on the forceps. Run the node after
-- **The grasping does not work** - The controller may be faulting which can be indicated be the red light on the PCB board. Via EPOS software, press the "Fault Reset" button and then the "Enabled" button. **Unconfirmed** *If it continues to fault, manually spin the forceps to the "optimal grasping range" at the closing position or slightly closed and then see if the voltage position increases and decreases via ROS node. This may have to do with the sensor not being able to work once it is too far away from the closed position.**
-- **The forceps stops spinning or grasping is stuck** - The minimum or maximum positions may be reached. Reset initial joint positions or adjust min and max position values accordingly.
+- **The forceps continuously rotates** - This is due to the maxon controller having a calibration voltage of 2.5V. The voltage from the PCI encoder may output a constant 5V signal and the "position" via check node may be increasing continuously. Try resetting the initial positions and then turn on the forceps. Run the node after to see results.
+- **The motor does not spin** - The controller may be faulting which can be indicated be the red light on the PCB board. Via EPOS software, press the "Fault Reset" button and then the "Enabled" button (turning off and on via switch may work as well). Ensure that the motor is set to velocity mode and that the execution mask is enabled as this will allow escon to control the motors
+- **The forceps stops spinning or grasping is stuck** - The minimum or maximum positions may be reached as per escon parameter settings. Reset initial joint positions or adjust min and max position values accordingly.
 
 ## Patient Side
 The master computer that runs via Ubuntu 20.04
@@ -82,24 +82,27 @@ Operating real robots can be dangerous. **Be cautious and careful!** <br>
 # Real Robot
 Operating real robots can be dangerous. **Be cautious and careful!**<br>
 You will need another person to be ready to hit the emergency stop upon robot initiation and when operating the robots. 
-## Instructions
+## System Setup
 1. Calibrate the robots
 2. Setup the phantom model
 3. Manually insert the tool tips 0.5 cm into the rcm points
-4. Launch operator side reciever on program on the windows computer
-5. Open VREP (CoppeliaSim) and the **eye_ball_manipulation_forecps_v2.ttt** scene
-6. **Set RCM Positions:**<br>
+
+
+## Instructions
+1. Launch operator side reciever on program on the windows computer
+2. Open VREP (CoppeliaSim) and the **eye_ball_manipulation_forecps_v2.ttt** scene
+3. **Set RCM Positions:**<br>
 `roslaunch robot_control set_rcm_positions.launch --screen`
-7. First test through simulation: <br>
+4. First test through simulation: <br>
 **Launch Simulation Teleoperation Program:** <br>
 `roslaunch robot_control run_simulation.launch --screen`
-8. Check that the settings are correct for `control_parameters.py` and `physical_parameters.py`
-9. Get ready to press the emergency stop button and launch the real teleoperation program: <br>
+5. Check that the settings are correct for `control_parameters.py` and `physical_parameters.py`
+6. Get ready to press the emergency stop button and launch the real teleoperation program: <br>
     **Launch Real Teleoperation Program:** <br>
 `roslaunch robot_control run_real.launch --screen`
-10. Upon new experiment, return to the initial pose: <br>
+7. Upon new experiment, return to the initial pose: <br>
 `rosrun return_to_initial_poses_orbital.py`
-11. Once finished, eject the instruments out of the phantom eyeball:
+8. Once finished, eject the instruments out of the phantom eyeball:
 `rosrun eject_instruments.py`
 ## Arduino Contact Reporter
 Arduino board wired to a PCB to notify the user of contact between the instrument and retinal surface. Used for testing of the teleoperation and auto positioning programs. <br>
@@ -107,3 +110,25 @@ Arduino board wired to a PCB to notify the user of contact between the instrumen
 `sudo chmod 777 /dev/ttyUSB0` <br>
 **Launch the contact reporter program:** <br>
 `roslaunch robot_control arduino_contact_reporter.launch --screen`
+## Video setup
+The computer will record using the SimpleScreenRecorder Application. Set the window or area to record accordingly. <br>
+### Simple Image Capture
+Simple Image capturing program that allows the operator to view the workspace. The arduino contact node is available to use in this program. <br>
+
+1. Turn on the microscopic camera
+2. (optional) Turn on the arduino contact node
+3. Launch the the simple image program: <br>
+`roslaunch robot_control simple_image_capture.launch`
+
+### Keypoint Detection Capture
+Keypoint Detection capturing program allows for semi-autonomous or autonomous positioning that allows the operator to view the workspace view along with important keypoints displayed, such as the instrument tip, shadow tip, shaft point, ROI, and more.  <br>
+
+1. Turn on the microscopic camera
+2. (optional) Turn on the arduino contact node
+3. Launch the the simple image program: <br> 
+`roslaunch robot_control image_processing_node.launch` <br> <br>
+# Troubleshooting
+## Robots <br>
+Robots are giving an error on the screen that it cannot connect to the computer
+- Ensure the emergency stop buttons are not pressed
+- Try physically restarting the robots

@@ -16,6 +16,9 @@ def main():
     rospy.spin()
 
 class VideoNode:
+    """
+    This class shows and extracts the frames from the video and publishes the ROI image and the overview image.
+    """
     def __init__(self):
         # VIDEO ABSOLUTE OR RELATIVE PATH
         self.parameters = img_parameters.ImageParameters()

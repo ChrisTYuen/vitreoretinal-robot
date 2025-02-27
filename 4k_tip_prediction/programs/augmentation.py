@@ -16,20 +16,21 @@ def augmentation():
     image_num_after_augmentation = parameters.image_num_after_augmentation
 
     original_num = len(os.listdir(parameters.raw_resized_path))
+    print('original_num: ' + str(original_num))
     original_num_for_train = parameters.original_num_for_train
     original_num_for_test = int((original_num - original_num_for_train) / 2)
     original_num_for_val = original_num_for_test
 
     augmentation_num = image_num_after_augmentation - original_num
-    aug_num_for_train = parameters.aug_num_for_train
-    aug_num_for_test = int((augmentation_num - aug_num_for_train) / 2)
-    aug_num_for_val = aug_num_for_test
 
     transforms = fn.get_augmentation()
 
+    if not os.path.exists(parameters.folder_path + 'dataset/' + parameters.model):
+        os.mkdir(parameters.folder_path + 'dataset/' + parameters.model)
+    if not os.path.exists(parameters.folder_path + 'dataset/' + parameters.model + '/' + parameters.image_quality):
+        os.mkdir(parameters.folder_path + 'dataset/' + parameters.model + '/' + parameters.image_quality)
     if not os.path.exists(parameters.raw_augmented_path):
         os.mkdir(parameters.raw_augmented_path)
-
     if not os.path.exists(parameters.mask_augmented_path):
         os.mkdir(parameters.mask_augmented_path)
 
@@ -90,28 +91,12 @@ def augmentation():
     print(str(original_num_for_val) + ' original images copied to val and val_mask folder!')
 
     i = 0
-    while i < aug_num_for_train:
+    while i < augmentation_num:
         fn.copy_files(parameters.raw_augmented_path, parameters.mask_augmented_path,
                       parameters.dataset_train_path, parameters.dataset_train_mask_path,
                       aug_list[i] + original_num + 1, i + original_num_for_train + 1)
         i = i + 1
-    print(str(aug_num_for_train) + ' augmented images copied to train and train_mask folder!')
-
-    while i < aug_num_for_train + aug_num_for_test:
-        fn.copy_files(parameters.raw_augmented_path, parameters.mask_augmented_path,
-                      parameters.dataset_test_path, parameters.dataset_test_mask_path,
-                      aug_list[i] + original_num + 1,
-                      i - aug_num_for_train + original_num_for_test + 1)
-        i = i + 1
-    print(str(aug_num_for_test) + ' augmented images copied to test and test_mask folder!')
-
-    while i < aug_num_for_train + aug_num_for_test + aug_num_for_val:
-        fn.copy_files(parameters.raw_augmented_path, parameters.mask_augmented_path,
-                      parameters.dataset_val_path, parameters.dataset_val_mask_path,
-                      aug_list[i] + original_num + 1,
-                      i - aug_num_for_train - aug_num_for_test + original_num_for_val + 1)
-        i = i + 1
-    print(str(aug_num_for_val) + ' augmented images copied to val and val_mask folder!')
+    print(str(augmentation_num) + ' augmented images copied to train and train_mask folder!')
 
 
 if __name__ == '__main__':

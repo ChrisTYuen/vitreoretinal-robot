@@ -47,9 +47,12 @@
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <robot_control/ImgShowMsg.h>
-#include <rosilo_datalogger/AddValueMsg.h>
+#include <robot_control/CImage.h>
+#include <robot_control/ROI.h>
+#include <sas_datalogger/AddValueMsg.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Bool.h>
+#include <array>
 
 class DeckLinkCaptureDelegate : public IDeckLinkInputCallback
 {
@@ -63,8 +66,9 @@ public:
     virtual HRESULT STDMETHODCALLTYPE VideoInputFrameArrived(IDeckLinkVideoInputFrame*, IDeckLinkAudioInputPacket*);
 
     image_transport::ImageTransport image_transport_;
-    ros::Publisher publisher_ROI_frame;
     image_transport::Publisher publisher_overview_frame;
+    ros::Publisher publisher_compressed_frame;
+    ros::Publisher publisher_ROI_frame;
     ros::Subscriber subscriber_roi_parameter;
     ros::Subscriber subscriber_tip_positions;
     ros::Subscriber subscriber_predicted_distances;
@@ -73,69 +77,103 @@ public:
     ros::Subscriber subscriber_planar_error;
     ros::Subscriber subscriber_current_step;
 
+    void targetImageCapture();
+    void keypointImageCapture();
+    
+    template <typename Container>
+    std::pair<cv::Mat, Container> preprocessImageForROI(const cv::Mat& inputImage, const int& ROI_NN_resize);
+    
     void _get_ROI_parameter(const robot_control::ImgShowMsg::ConstPtr& msg);
     void _get_predicted_distances(const robot_control::ImgShowMsg::ConstPtr& msg);
-    void _get_tip_positions(const rosilo_datalogger::AddValueMsg::ConstPtr& msg);
+    void _get_tip_positions(const sas_datalogger::AddValueMsg::ConstPtr& msg);
     void _get_contact_reporter(const std_msgs::Bool::ConstPtr& msg);
-    void _get_positioning_points(const rosilo_datalogger::AddValueMsg::ConstPtr& msg);
-    void _get_planar_error(const rosilo_datalogger::AddValueMsg::ConstPtr& msg);
+    void _get_positioning_points(const sas_datalogger::AddValueMsg::ConstPtr& msg);
+    void _get_planar_error(const sas_datalogger::AddValueMsg::ConstPtr& msg);
     void _get_current_step(const std_msgs::String::ConstPtr& msg);
 
-    int image_width = -1; //Initially we don't know
-    int image_height = -1; //Initially we don't know
+    int image_width {-1};  //initial value
+    int image_height {-1};  //initial value
 
-    double original_w = 3840;
-    double original_h = 2160;
+    // Constant image values
+    static constexpr int original_w {3840};  // original image size from the camera
+    static constexpr int original_h {2160};
 
-    double windowsize_w = 1920;
-    double windowsize_h = 1080;
+    static constexpr int windowsize_w {1920};  // size of the display window
+    static constexpr int windowsize_h {1080};
 
-    double display_ratio = windowsize_w/original_w;
+    static constexpr double display_ratio {static_cast<double>(windowsize_w) / original_w};
 
-    int key;
+    static constexpr int ROI_display_size {256};  // size of the ROI display window for operator
 
-    bool contact = false;
+    // parameters for keypoint_predict_node (@@--- ALIGN WITH C++ SIDE ---@@)
+    static constexpr int output_size {512};    // size of the output ROI image
+    static constexpr int predict_size {256};   // downscaled for faster processing
 
-    int ROI_center[2] = {3840/2, 2060/2};
-    int instrument_tip[2] = {3840/2, 2060/2};
-    int instrument_tip_overall[2] = {3840/2, 2060/2};
-    int shadow_tip[2] = {3840/2, 2060/2};
-    int shaft_point[2] = {3840/2, 2060/2};
-    int left_top[2];
-    int right_bottom[2];
-    int ROI_half_size = 768/2;
-    int point_1[2] = {3840/2, 2060/2};
-    int point_2[2] = {3840/2, 2060/2};
-    int point_3[2] = {3840/2, 2060/2};
-    int point_4[2] = {3840/2, 2060/2};
-    int point_5[2] = {3840/2, 2060/2};
-    int radii_1 = 1;
-    int radii_2 = 1;
-    int radii_3 = 1;
-    int radii_4 = 1;
-    int radii_5 = 1;
+    static constexpr int ROI_NN_resize {270};  // height size of the resized frame for ROI center detection
+    static constexpr int resize_width {output_size * original_w / original_h};  // width size of the resized frame for target point detection
 
-    std::string current_step = "Waiting";
+    // Variables for the Image Workspace
+    int ROI_half_dis {768/2};
+    cv::Point ROI_center {3840/2, 2060/2};                      // center of the ROI
+    cv::Point instrument_tip {ROI_half_dis/2, ROI_half_dis/2};  // tip of main surgical instrument in ROI
+    cv::Point instrument_tip_overall {3840/2, 2060/2};          // tip of main surgical instrument in the overall image
+    cv::Point shadow_tip {ROI_half_dis/2, ROI_half_dis/2};      // tip of the shadow instrument in ROI    
+    cv::Point point_instrument {3840/2, 2060/2};                // intermitent datapoint of shaft_point
+    cv::Point shaft_point {ROI_half_dis/2, ROI_half_dis/2};     // main surgical instrument shaft point in ROI
+    cv::Point shaft_point_overall {3840/2, 2060/2};             // main surgical instrument shaft point in the overall image
 
-    int planar_error = 0;
-    int tip_dis = 0;
-    int shaft_dis = 0;
+    cv::Point left_top {ROI_center.x - ROI_half_dis, ROI_center.y - ROI_half_dis};                    // top left corner of the ROI
+    cv::Point right_bottom {ROI_center.x + ROI_half_dis, ROI_center.y + ROI_half_dis};                // bottom right corner of the ROI
+    cv::Rect ROI_region {left_top.x, left_top.y, 2 * ROI_half_dis, 2 * ROI_half_dis};                 // ROI region for processing
+    cv::Rect ROI_display_region {0,windowsize_h-ROI_display_size,ROI_display_size,ROI_display_size};  // ROI region for displaying to operator
 
-    double predict_size = 256;
-    double output_size = 256;
+    // Store the points as a array of cv::Point
+    std::array<cv::Point, 5> target_points {{ 
+        cv::Point{3840/2, 2060/2},  // top
+        cv::Point{3840/2, 2060/2},  // left 
+        cv::Point{3840/2, 2060/2},  // middle
+        cv::Point{3840/2, 2060/2},  // right
+        cv::Point{3840/2, 2060/2}   // bottom
+    }};
+    
+    // Store the radii as a array of cv::Point
+    std::array<int, 5> radii {1, 1, 1, 1, 1};
+    
+    // Processing step
+    bool first_iteration {true};
+    bool keypoint_message {false};
+    bool initial_processing {true};
 
-    cv::Mat cv_image_yuv;
-    cv::Mat cv_image_bgr;
+    // Positioning step variables
+    int key {};
+    bool contact {false};
+    std::string current_step {"Waiting"};
 
-    cv::Rect ROI_region;
-    cv::Rect ROI_display_region = cv::Rect(windowsize_w-predict_size-2,windowsize_h-predict_size-2,predict_size,predict_size);
+    // Distance variables
+    int planar_error {0};
+    int tip_dis {0};
+    int shaft_dis {0};
 
-    cv::Mat cv_image_ROI;
-    cv::Mat cv_image_ROI_resized;
+    // Member variables for Image Processing
+    cv::Mat cv_image_yuv{};
+    cv::Mat cv_image_bgr{};
+    cv::Mat cv_image_ROI{};
+    cv::Mat cv_image_ROI_resized{};
+    cv::Mat cv_image_ROI_display{};
+    cv::Mat cv_image_show{};
+    cv::Mat cv_image_overview_resized{};
 
-    cv::Mat cv_image_show;
+    // ROS messages
+    robot_control::CImage cframe_msg{};
+    robot_control::ROI ROI_msg{};
+    sensor_msgs::ImagePtr cframe_image_msg{nullptr};
+    sensor_msgs::ImagePtr ROI_image_msg{nullptr};
+    sensor_msgs::ImagePtr overview_image_msg{nullptr};
 
-    cv::Mat cv_image_overview_resized;
+    cv::Mat resizedImage{};
+    cv::Mat croppedImage{};
+    std::array<int, 6> roi_dimensions{};
+    std::array<int, 5> roi_values{};
 
 private:
 	int32_t				m_refCount;

@@ -1,5 +1,5 @@
 # 824 simulation PC
-"patient_side_ips": ["192.168.0.5"]
+"patient_side_ips": ["192.168.0.12"]
 "patient_side_ports": [2222]
 "operator_side_ips": ["192.168.0.7"]
 "operator_side_ports": [2222]

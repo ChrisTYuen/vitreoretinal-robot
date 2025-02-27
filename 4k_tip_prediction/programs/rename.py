@@ -30,10 +30,12 @@ def rename():
     ids = sorted(os.listdir(parameters.extracted_frames_path))
     extracted_fps = [os.path.join(parameters.extracted_frames_path, img_id) for img_id in ids if is_image(os.path.join(parameters.extracted_frames_path, img_id))]
 
+    if not os.path.exists(parameters.folder_path + 'workspace/' + parameters.model):
+        os.mkdir(parameters.folder_path + 'workspace/' + parameters.model)
     if not os.path.exists(parameters.json_and_raw_path):
         os.mkdir(parameters.json_and_raw_path)
 
-    image_number = 262  # Start numbering from 1
+    image_number = 1  # Start numbering from 1
 
     for i in range(len(extracted_fps)):
         # Copy and rename image file

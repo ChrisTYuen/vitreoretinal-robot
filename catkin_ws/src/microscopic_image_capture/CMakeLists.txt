@@ -4,8 +4,9 @@ project(microscopic_image_capture)
 #Add custom (non compiling) targets so launch scripts and python files show up in QT Creator's project view.
 file(GLOB_RECURSE EXTRA_FILES */*)
 add_custom_target(${PROJECT_NAME}_OTHER_FILES ALL WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} SOURCES ${EXTRA_FILES})
-## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+
+## Compile as C++17, supported in ROS Kinetic and newer
+set(CMAKE_CXX_STANDARD 17)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -20,6 +21,8 @@ find_package(catkin REQUIRED COMPONENTS
   robot_control
 )
 find_package(OpenCV)
+find_package(OpenMP REQUIRED)
+find_package(message_filters REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -95,6 +98,12 @@ find_package(OpenCV)
 ##   * uncomment the "generate_dynamic_reconfigure_options" section below
 ##     and list every .cfg file to be processed
 
+# Manually set OpenMP include directories and libraries
+if(OpenMP_CXX_FOUND)
+    set(OpenMP_INCLUDE_DIRS ${OpenMP_CXX_INCLUDE_DIRS})
+    set(OpenMP_LIBRARIES ${OpenMP_CXX_LIBRARIES})
+endif()
+
 ## Generate dynamic reconfigure parameters in the 'cfg' folder
 # generate_dynamic_reconfigure_options(
 #   cfg/DynReconf1.cfg
@@ -111,10 +120,10 @@ find_package(OpenCV)
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES microscopic_image_capture
-#  CATKIN_DEPENDS other_catkin_pkg
-#  DEPENDS system_lib
+  INCLUDE_DIRS include
+  LIBRARIES ${PROJECT_NAME}
+  CATKIN_DEPENDS roscpp rospy std_msgs sensor_msgs cv_bridge image_transport robot_control
+  DEPENDS OpenMP
 )
 
 ###########
@@ -128,6 +137,7 @@ include_directories(
   src/decklink_api
   ${catkin_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
+  ${OpenMP_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -166,6 +176,7 @@ target_link_libraries(${PROJECT_NAME}_node
   -lpthread
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
+  OpenMP::OpenMP_CXX
 )
 
 #############

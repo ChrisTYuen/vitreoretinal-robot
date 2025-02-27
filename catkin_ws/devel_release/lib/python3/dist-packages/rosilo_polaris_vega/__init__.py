@@ -1,1 +1,0 @@
-/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_polaris_vega/lib/python3/dist-packages/rosilo_polaris_vega/__init__.py

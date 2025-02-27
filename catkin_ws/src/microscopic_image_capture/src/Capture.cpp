@@ -45,6 +45,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <csignal>
+#include <omp.h>
 
 #include <microscopic_image_capture/Capture.h>
 #include <microscopic_image_capture/Config.h>
@@ -55,35 +56,51 @@
 #include <chrono>
 #include <cmath>
 #include <string>
+#include <array>
 
 #include <ros/ros.h>
+#include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.h>
 #include <robot_control/ImgShowMsg.h>
+#include <robot_control/CImage.h>
 #include <robot_control/ROI.h>
+#include <sas_datalogger/AddValueMsg.h>
 #include <std_msgs/Bool.h>
-#include <rosilo_datalogger/AddValueMsg.h>
 
 static pthread_mutex_t	g_sleepMutex;
 static pthread_cond_t	g_sleepCond;
-static int				g_videoOutputFile = -1;
-static int				g_audioOutputFile = -1;
-static bool				g_do_exit = false;
+static int				g_videoOutputFile {-1};
+static int				g_audioOutputFile {-1};
+static bool				g_do_exit {false};
 
 static BMDConfig		g_config;
 
-static IDeckLinkInput*	g_deckLinkInput = NULL;
+static IDeckLinkInput*	g_deckLinkInput {NULL};
 
-static unsigned long	g_frameCount = 0;
+static unsigned long	g_frameCount {0};
 
 DeckLinkCaptureDelegate::DeckLinkCaptureDelegate(ros::NodeHandle& nodehandle) :
-    image_transport_(nodehandle),
-    m_refCount(1),
-    m_pixelFormat(g_config.m_pixelFormat)
+    image_transport_(nodehandle), //attach the image transport to the node handle for messages
+    m_refCount{1},
+    m_pixelFormat{g_config.m_pixelFormat},
+    cv_image_yuv{cv::Size(original_w, original_h), CV_8UC2},
+    cv_image_bgr{cv::Size(original_w, original_h), CV_8UC3},
+    cv_image_ROI{cv::Size(predict_size, predict_size), CV_8UC3},
+    cv_image_ROI_resized{cv::Size(predict_size, predict_size), CV_8UC3},
+    cv_image_ROI_display{cv::Size(output_size, output_size), CV_8UC3},
+    cv_image_show{cv::Size(windowsize_w, windowsize_h), CV_8UC3},
+	cv_image_overview_resized{cv::Size(original_w / original_h * output_size, output_size), CV_8UC3},
+    resizedImage{cv::Size(original_w, ROI_NN_resize), CV_8UC3}, 
+    croppedImage{cv::Size(original_w, ROI_NN_resize), CV_8UC3}    
 {
-    publisher_ROI_frame = nodehandle.advertise<robot_control::ROI>(std::string("microscope/capture"), 1);
-    publisher_overview_frame = image_transport_.advertise(std::string("img_show/overview"), 1);
-    subscriber_roi_parameter = nodehandle.subscribe("predict/ROI_parameter", 10, &DeckLinkCaptureDelegate::_get_ROI_parameter, this);
+    // ROS publishers
+	publisher_compressed_frame = nodehandle.advertise<robot_control::CImage>(("microscope/compressed_frame"), 1);
+    publisher_ROI_frame = nodehandle.advertise<robot_control::ROI>("microscope/capture", 1);
+	publisher_overview_frame = image_transport_.advertise(std::string("img_show/overview"), 1);
+
+    // ROS subscribers
+	subscriber_roi_parameter = nodehandle.subscribe("predict/ROI_parameter", 10, &DeckLinkCaptureDelegate::_get_ROI_parameter, this);
     subscriber_tip_positions = nodehandle.subscribe("predict/tip_positions", 10, &DeckLinkCaptureDelegate::_get_tip_positions, this);
     subscriber_predicted_distances = nodehandle.subscribe("predict/distances", 10, &DeckLinkCaptureDelegate::_get_predicted_distances, this);
     subscriber_contact_reporter = nodehandle.subscribe("arduino/contact", 10, &DeckLinkCaptureDelegate::_get_contact_reporter, this);
@@ -99,7 +116,7 @@ ULONG DeckLinkCaptureDelegate::AddRef(void)
 
 ULONG DeckLinkCaptureDelegate::Release(void)
 {
-	int32_t newRefValue = __sync_sub_and_fetch(&m_refCount, 1);
+	int32_t newRefValue {__sync_sub_and_fetch(&m_refCount, 1)};
 	if (newRefValue == 0)
 	{
 		delete this;
@@ -110,6 +127,14 @@ ULONG DeckLinkCaptureDelegate::Release(void)
 
 HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame* videoFrame, IDeckLinkAudioInputPacket* audioFrame)
 {
+/*
+* This node retains the full resolution frame as it is too expensive to publish the full image. Downscaling reduces data published and results in faster NN.
+* 
+* General workflow of capture node to process ROI and keypoints within:
+* Capture.cpp retrieves frame & downscales (for predict) --cframe.msg--> ROI_predict_node predicts ROI center/size and point on instrument 
+* --msg_ROI_parameter--> Capture.cpp extracts ROI & downscales --ROI_msg--> keypoint_predict_node predicts intrument tip and shadow 
+* --msg_tip--> Capture.cpp displays image on screen with markup
+*/
 //    ros::Time start = ros::Time::now();
 	// Handle Video Frame
 	if (videoFrame)
@@ -120,64 +145,74 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
 		}
 		else
 		{
-            image_width = videoFrame->GetWidth();
+			image_width = videoFrame->GetWidth();
             image_height = videoFrame->GetHeight();
 
-            void* buffer;
+            // Fetch video frame, convert to OpenCV YUV and BGR formats
+			void* buffer;
             videoFrame->GetBytes(&buffer);
-            cv_image_yuv = cv::Mat(image_height, image_width, CV_8UC2, buffer);
+            cv_image_yuv = cv::Mat{image_height, image_width, CV_8UC2, buffer};
             cv::cvtColor(cv_image_yuv, cv_image_bgr, cv::COLOR_YUV2BGR_UYVY);
 
-            left_top[0] = ROI_center[0] - ROI_half_size;
-            left_top[1] = ROI_center[1] - ROI_half_size;
-            right_bottom[0] = ROI_center[0] + ROI_half_size;
-            right_bottom[1] = ROI_center[1] + ROI_half_size;
+			// Parallelize the image resizing
+			#pragma omp parallel sections
+			{
+				#pragma omp section 
+				{
+					cv::resize(cv_image_ROI, cv_image_ROI_resized, cv::Size{predict_size, predict_size});  // Resize for ROI NN
+				}
+				#pragma omp section 
+				{
+					if (predict_size == ROI_display_size) {
+						cv_image_ROI_display = cv_image_ROI_resized.clone();
+					} else {
+						cv::resize(cv_image_ROI, cv_image_ROI_display, cv::Size{ROI_display_size, ROI_display_size});
+					}
+				}
+			}
 
-            ROI_region = cv::Rect(left_top[0],left_top[1],2*ROI_half_size,2*ROI_half_size);
-            cv_image_ROI = cv::Mat(cv_image_bgr, ROI_region);
-            cv::resize(cv_image_ROI,cv_image_ROI_resized,cv::Size(predict_size, predict_size));
+			// Display message on first iteration of loop
+			if (first_iteration) {
+				std::cout << "Displaying target points. Press any key to continue..." << std::endl;
+				first_iteration = false;
+			}
 
-            robot_control::ROI ROI_msg;
-            sensor_msgs::ImagePtr ROI_image_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_ROI_resized).toImageMsg();
-            ROI_image_msg->header.stamp = ros::Time::now();
-            ROI_msg.roi_image = *ROI_image_msg;
-            ROI_msg.roi_values.resize(3);
-            ROI_msg.roi_values[0] = ROI_center[0];
-            ROI_msg.roi_values[1] = ROI_center[1];
-            ROI_msg.roi_values[2] = ROI_half_size;
+			if (keypoint_message) {
+				std::cout << "Displaying ROI and keypoints" << std::endl;
+				keypoint_message = false;
+			}
+		
+			// Capture only target points until user presses a key, then capture keypoints
+			if (initial_processing) {  
+				targetImageCapture();  // Capture the target points
 
-            publisher_ROI_frame.publish(ROI_msg);
+				int keypress = cv::waitKey(1);  // Wait for a keypress
+				if (keypress != -1) {
+					initial_processing = false;
+					keypoint_message = true;
+				}
+			} else {
+				keypointImageCapture();  // Capture the keypoints
+			}
 
-            cv::resize(cv_image_bgr,cv_image_overview_resized,cv::Size(original_w/original_h*output_size, output_size));
-            sensor_msgs::ImagePtr overview_image_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image_overview_resized).toImageMsg();
-            overview_image_msg->header.stamp = ros::Time::now();
-            publisher_overview_frame.publish(overview_image_msg);
+            // Display the images on the screen and mark up
+            for (const auto& point : target_points) {									   // Draw the target points
+				cv::circle(cv_image_bgr, point, 10, cv::Scalar{0, 255, 255}, -1);
+			}
+			cv::resize(cv_image_bgr, cv_image_show,cv::Size(windowsize_w, windowsize_h));  // Resize for display
+			cv::rectangle(cv_image_show, cv::Point{2, windowsize_h - ROI_display_size - 2}, cv::Point{ROI_display_size + 2, windowsize_h - 2}, cv::Scalar{255, 0, 0}, 10);
+            cv_image_ROI_display.copyTo(cv_image_show(ROI_display_region));                // Copy the ROI image to the display image
 
-            cv::rectangle(cv_image_bgr,cv::Point(left_top[0],left_top[1]),cv::Point(right_bottom[0],right_bottom[1]),cv::Scalar(0,255,0),10);
-            cv::circle(cv_image_bgr, cv::Point(point_1[0], point_1[1]), 10, cv::Scalar(0, 255, 255), -1);
-            cv::circle(cv_image_bgr, cv::Point(point_2[0], point_2[1]), 10, cv::Scalar(0, 255, 255), -1);
-            cv::circle(cv_image_bgr, cv::Point(point_3[0], point_3[1]), 10, cv::Scalar(0, 255, 255), -1);
-            cv::circle(cv_image_bgr, cv::Point(point_4[0], point_4[1]), 10, cv::Scalar(0, 255, 255), -1);
-            cv::circle(cv_image_bgr, cv::Point(point_5[0], point_5[1]), 10, cv::Scalar(0, 255, 255), -1);
-            cv::circle(cv_image_bgr, cv::Point(instrument_tip_overall[0], instrument_tip_overall[1]), 10, cv::Scalar(0, 0, 255), -1);
-            cv::resize(cv_image_bgr,cv_image_show,cv::Size(windowsize_w, windowsize_h));
-            cv::rectangle(cv_image_show,cv::Point(windowsize_w-predict_size-2,windowsize_h-predict_size-2),cv::Point(windowsize_w-2,windowsize_h-2),cv::Scalar(255,0,0),10);
-            cv::circle(cv_image_ROI_resized, cv::Point(instrument_tip[0], instrument_tip[1]), 5, cv::Scalar(0, 0, 255), -1);
-            cv::circle(cv_image_ROI_resized, cv::Point(shadow_tip[0], shadow_tip[1]), 5, cv::Scalar(255, 0, 0), -1);
-            // cv::circle(cv_image_ROI_resized, cv::Point(shaft_point[0], shaft_point[1]), 5, cv::Scalar(0, 0, 255), -1);
-            cv::line(cv_image_ROI_resized, cv::Point(shaft_point[0], shaft_point[1]), cv::Point(instrument_tip[0], instrument_tip[1]), cv::Scalar(0, 0, 255), 3, -1);
-            cv_image_ROI_resized.copyTo(cv_image_show(ROI_display_region));
-
-            if(contact)
-            {
-                cv::putText(cv_image_show, "Contact!!", cv::Point(1300, 100), cv::FONT_HERSHEY_SIMPLEX, 3, cv::Scalar(0, 255, 0), 5, cv::LINE_AA);
+            // Display text information on the screen
+			if (contact) {
+                cv::putText(cv_image_show, "Contact!!", cv::Point(1300, 100), cv::FONT_HERSHEY_SIMPLEX, 3, cv::Scalar{0, 255, 0}, 5, cv::LINE_AA);
             }
 
-            cv::putText(cv_image_show, "planar_error: " + std::to_string(planar_error), cv::Point(1500, 150), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 3, cv::LINE_AA);
-            cv::putText(cv_image_show, "shaft_dis: " + std::to_string(shaft_dis), cv::Point(1500, 200), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 3, cv::LINE_AA);
-            cv::putText(cv_image_show, "tip_dis: " + std::to_string(tip_dis), cv::Point(1500, 250), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 3, cv::LINE_AA);
-            cv::putText(cv_image_show, "ROI_size: " + std::to_string(ROI_half_size*2), cv::Point(1500, 300), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 3, cv::LINE_AA);
-            cv::putText(cv_image_show, "current_step: " + current_step, cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 255, 0), 3, cv::LINE_AA);
+            cv::putText(cv_image_show, "planar_error: " + std::to_string(planar_error), cv::Point{1500, 150}, cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar{0, 255, 0}, 3, cv::LINE_AA);
+            cv::putText(cv_image_show, "shaft_dis: " + std::to_string(shaft_dis), cv::Point{1500, 200}, cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar{0, 255, 0}, 3, cv::LINE_AA);
+            cv::putText(cv_image_show, "tip_dis: " + std::to_string(tip_dis), cv::Point{1500, 250}, cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar{0, 255, 0}, 3, cv::LINE_AA);
+            cv::putText(cv_image_show, "ROI_size: " + std::to_string(ROI_half_dis * 2), cv::Point{1500, 300}, cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar{0, 255, 0}, 3, cv::LINE_AA);
+            cv::putText(cv_image_show, "current_step: " + current_step, cv::Point{50, 50}, cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar{0, 255, 0}, 3, cv::LINE_AA);
 
             cv::namedWindow("microscope", cv::WINDOW_NORMAL);
             cv::setWindowProperty("microscope", cv::WND_PROP_FULLSCREEN, cv::WINDOW_FULLSCREEN);
@@ -189,6 +224,54 @@ HRESULT DeckLinkCaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame
 		g_frameCount++;
 	}
     return S_OK;
+}
+
+void DeckLinkCaptureDelegate::targetImageCapture()
+{
+	cv::resize(cv_image_bgr, cv_image_overview_resized, cv::Size{resize_width, output_size});  // Resize for overview frame
+
+	// Prepare and publish the overview image
+	overview_image_msg = cv_bridge::CvImage{std_msgs::Header(), "bgr8", cv_image_overview_resized}.toImageMsg();
+	overview_image_msg->header.stamp = ros::Time::now();
+	publisher_overview_frame.publish(overview_image_msg);
+}
+
+void DeckLinkCaptureDelegate::keypointImageCapture()
+{
+	// Resize the image for sending to ROI predictor
+	auto [croppedImage, roi_dimensions] = preprocessImageForROI<std::array<int,6>>(cv_image_bgr, ROI_NN_resize);
+
+	// Prepare the cframe message for publishing and publish
+	cframe_image_msg = cv_bridge::CvImage{std_msgs::Header(), "bgr8", croppedImage}.toImageMsg();
+	cframe_image_msg->header.stamp = ros::Time::now();
+	cframe_msg.cframe_image = *cframe_image_msg;	 	    // Copy the compressed image into message
+	cframe_msg.cframe_values.assign(roi_dimensions.begin(), roi_dimensions.end()); // Copy the ROI dimensions into message
+	publisher_compressed_frame.publish(cframe_msg);  // Publish the cframe message
+
+	// Calculate ROI for processing
+	left_top = cv::Point{ROI_center.x - ROI_half_dis, ROI_center.y - ROI_half_dis};
+	right_bottom = cv::Point{ROI_center.x + ROI_half_dis, ROI_center.y + ROI_half_dis};
+	ROI_region = cv::Rect{left_top.x, left_top.y, 2 * ROI_half_dis, 2 * ROI_half_dis};
+	cv_image_ROI = cv::Mat{cv_image_bgr, ROI_region};
+
+	// Prepare and publish the ROI message for keypoint detection
+	ROI_image_msg = cv_bridge::CvImage{std_msgs::Header(), "bgr8", cv_image_ROI_resized}.toImageMsg();
+	ROI_image_msg->header.stamp = ros::Time::now();
+	ROI_msg.roi_image = *ROI_image_msg;   // Copy the ROI image into message
+	roi_values = {ROI_center.x, ROI_center.y, ROI_half_dis, point_instrument.x, point_instrument.y};
+	ROI_msg.roi_values.assign(roi_values.begin(), roi_values.end());  // Copy the values from the array to msg
+	publisher_ROI_frame.publish(ROI_msg);
+
+	// Draw the ROI and keypoints on the overview image
+	cv::rectangle(cv_image_bgr, left_top, right_bottom, cv::Scalar{0, 255, 0}, 10);   // Draw the ROI rectangle
+	cv::circle(cv_image_bgr, instrument_tip_overall, 10, cv::Scalar{0, 0, 255}, -1);  // Draw the instrument tip
+	cv::circle(cv_image_bgr, shaft_point_overall, 10, cv::Scalar{255, 255, 0}, -1);   // Draw the shaft point
+
+	// Draw the keypoints on the ROI image
+	cv::circle(cv_image_ROI_display, instrument_tip, 5, cv::Scalar{0, 0, 255}, -1);  // Draw the instrument tip
+	cv::circle(cv_image_ROI_display, shadow_tip, 5, cv::Scalar{255, 0, 0}, -1);      // Draw the shadow tip
+	// cv::circle(cv_image_ROI_display, shaft_point, 5, cv::Scalar{0, 0, 255}, -1);  // Draw the shaft point
+	cv::line(cv_image_ROI_display, shaft_point, instrument_tip, cv::Scalar{0, 0, 255}, 3, -1);  // Draw the shaft line
 }
 
 HRESULT DeckLinkCaptureDelegate::VideoInputFormatChanged(BMDVideoInputFormatChangedEvents events, IDeckLinkDisplayMode *mode, BMDDetectedVideoInputFormatFlags formatFlags)
@@ -240,6 +323,30 @@ bail:
 	return S_OK;
 }
 
+template <typename Container>
+std::pair<cv::Mat, Container> DeckLinkCaptureDelegate::preprocessImageForROI(const cv::Mat& inputImage, const int& ROI_NN_resize) {
+
+    // Resize the image for sending to ROI predictor
+    int resizeWidth = ROI_NN_resize * original_w / original_h;
+    cv::resize(inputImage, resizedImage, cv::Size{resizeWidth, ROI_NN_resize});
+
+    // Crop out image if size is not divisible by the stride of 16
+    int cropHeight = ROI_NN_resize % 16;
+    int cropWidth = resizeWidth % 16;
+    int cropHeightTop = cropHeight / 2;
+    int cropHeightBottom = cropHeight - cropHeightTop;
+    int cropWidthLeft = cropWidth / 2;
+    int cropWidthRight = cropWidth - cropWidthLeft;
+
+    cv::Rect roi{cropWidthLeft, cropHeightTop, resizeWidth - cropWidthLeft - cropWidthRight, ROI_NN_resize - cropHeightTop - cropHeightBottom};
+    croppedImage = resizedImage(roi);
+
+    // Prepare ROI dimensions
+    roi_dimensions = {resizeWidth, ROI_NN_resize, cropWidthLeft, cropHeightTop, roi.width, roi.height};
+
+    return {croppedImage, roi_dimensions};
+}
+
 static void sigfunc(int signum)
 {
 	if (signum == SIGINT || signum == SIGTERM)
@@ -250,22 +357,18 @@ static void sigfunc(int signum)
 
 void DeckLinkCaptureDelegate::_get_ROI_parameter(const robot_control::ImgShowMsg::ConstPtr &msg)
 {
-//    std::cout << ros::Time::now()-(msg->header.stamp) << std::endl;
-    ROI_center[0] = msg->value[0];
-    ROI_center[1] = msg->value[1];
-    ROI_half_size = msg->value[2];
+    ROI_center = cv::Point(msg->value[0], msg->value[1]);
+    ROI_half_dis = msg->value[2];
+	point_instrument = cv::Point(msg->value[3], msg->value[4]);
+	shaft_point_overall = cv::Point(msg->value[5], msg->value[6]);
 }
 
-void DeckLinkCaptureDelegate::_get_tip_positions(const rosilo_datalogger::AddValueMsg::ConstPtr &msg)
+void DeckLinkCaptureDelegate::_get_tip_positions(const sas_datalogger::AddValueMsg::ConstPtr &msg)
 {
-    instrument_tip[0] = msg->value[1];
-    instrument_tip[1] = msg->value[0];
-    shadow_tip[0] = msg->value[3];
-    shadow_tip[1] = msg->value[2];
-    shaft_point[0] = msg->value[5];
-    shaft_point[1] = msg->value[4];
-    instrument_tip_overall[0] = msg->value[6];
-    instrument_tip_overall[1] = msg->value[7];
+    instrument_tip = cv::Point(msg->value[1], msg->value[0]);
+	shadow_tip = cv::Point(msg->value[3], msg->value[2]);
+	shaft_point = cv::Point(msg->value[5], msg->value[4]);
+	instrument_tip_overall = cv::Point(msg->value[6], msg->value[7]);
 }
 
 void DeckLinkCaptureDelegate::_get_predicted_distances(const robot_control::ImgShowMsg::ConstPtr &msg)
@@ -277,29 +380,25 @@ void DeckLinkCaptureDelegate::_get_predicted_distances(const robot_control::ImgS
 void DeckLinkCaptureDelegate::_get_contact_reporter(const std_msgs::Bool::ConstPtr &msg)
 {
     contact = msg->data;
-//    std::cout << contact << std::endl;
 }
 
-void DeckLinkCaptureDelegate::_get_positioning_points(const rosilo_datalogger::AddValueMsg::ConstPtr &msg)
+void DeckLinkCaptureDelegate::_get_positioning_points(const sas_datalogger::AddValueMsg::ConstPtr &msg)
 {
-    point_1[0] = msg->value[0];
-    point_1[1] = msg->value[1];
-    point_2[0] = msg->value[2];
-    point_2[1] = msg->value[3];
-    point_3[0] = msg->value[4];
-    point_3[1] = msg->value[5];
-    point_4[0] = msg->value[6];
-    point_4[1] = msg->value[7];
-    point_5[0] = msg->value[8];
-    point_5[1] = msg->value[9];
-    radii_1 = msg->value[10];
-    radii_2 = msg->value[11];
-    radii_3 = msg->value[12];
-    radii_4 = msg->value[13];
-    radii_5 = msg->value[14];
+	// Store the points as a array of cv::Point
+	std::size_t index {0};
+	for (auto& point : target_points) {
+    	point.x = msg->value[index++];
+    	point.y = msg->value[index++];
+	}
+
+	// Store the radii as a array of cv::Point
+	index = 10;  // Ensure the start index for radii in msg->value
+	for (auto& radius : radii) {
+    	radius = msg->value[index++];
+	}
 }
 
-void DeckLinkCaptureDelegate::_get_planar_error(const rosilo_datalogger::AddValueMsg::ConstPtr &msg)
+void DeckLinkCaptureDelegate::_get_planar_error(const sas_datalogger::AddValueMsg::ConstPtr &msg)
 {
     planar_error = msg->value[0];
 }

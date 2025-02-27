@@ -1,5 +1,0 @@
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/share/rosilo_robot_kinematics/cmake/rosilo_robot_kinematicsConfig.cmake
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/share/rosilo_robot_kinematics/cmake/rosilo_robot_kinematicsConfig-version.cmake
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/librosilo_robot_kinematics.so
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/pkgconfig/rosilo_robot_kinematics.pc
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/python3/dist-packages/rosilo_robot_kinematics/__init__.py

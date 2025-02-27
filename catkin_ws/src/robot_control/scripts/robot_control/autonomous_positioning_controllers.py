@@ -10,18 +10,28 @@ from kinematics import kinematics_functions as kine_func
 from kinematics.parameters import physical_parameters, control_parameters
 from tools import functions
 from kinematics.orbital_manipulation_kinematics import OrbitalManipulationKinematics as om_kinematics
+from eyeball import eyeball
+from positioning_helper_functions import PositioningHelper as pos_help
 
 # Import other dependencies
 import numpy as np
 import time
 import rospy
-"""
-This file contains some controllers 
-"""
+import math
 
+"""
+This file contains controller functions for autonomous positioning of the robots with orbital manipulation.
+Planar positioning, overlap prevention, and vertical positioning are implemented, and additional positioning are
+included in this file. Rotation of a forceps device has currently NOT been tested at this time, but the foundation 
+is set for future testing. See Autonomous Coordinated Control of the Light Guide for Positioning in Vitreoretinal_Surgery
+described in V of Koyama et al. (2022),
+"""
 
 class AutonomousPositioningControllers:
-    def __init__(self):
+    def __init__(self, robot_si, robot_lg, robot_si_interface, robot_lg_interface, eye, vi, target_points,
+                 data_logger, predict, store, rcm_init_si, rcm_init_lg, D_rcm_init, 
+                 constrained_plane_list_si, constrained_plane_list_lg, rotation_c_plane_list, rotation_c_plane_unified_list):
+        
         self.parameter = control_parameters.Parameters()
         if self.parameter.solver == 0:
             self.qp_solver = DQ_QuadprogSolver()
@@ -31,99 +41,116 @@ class AutonomousPositioningControllers:
         self.sim_setup = physical_parameters.SimulationSetup
         self.fail_position_list = [np.zeros(4)]
 
-    def planar_positioning_controller(self, robot_si, robot_lg, robot_si_interface, robot_lg_interface,
-                                      theta_si, theta_lg,
-                                      t_start, total_iteration, td_error, planar_error, target_pixel,
-                                      eye, rcm_init_si, rcm_init_lg, D_rcm_init,
-                                      constrained_plane_list_si, constrained_plane_list_lg,
-                                      rotation_c_plane_list, rotation_c_plane_unified_list,
-                                      predict, store, data_logger, target_points, vi, theta_rotation_angle):
+        # Initialize the robots, eye, and other parameters
+        self.robot_si = robot_si
+        self.robot_lg = robot_lg
+        self.robot_si_interface = robot_si_interface
+        self.robot_lg_interface = robot_lg_interface
+        self.eye = eye
+        self.vi = vi
+        self.target_points = target_points
+        self.data_logger = data_logger
+        self.predict = predict
+        self.store = store
+
+        # Initialize other variables that were passed as parameters or returned
+        self.theta_si = None
+        self.theta_lg = None
+        self.t_start = None         # Revisit regarding the total iteration lines
+        self.td_error = None
+        self.planar_error = None
+        self.target_pixel = None
+        self.rcm_init_si = rcm_init_si
+        self.rcm_init_lg = rcm_init_lg
+        self.D_rcm_init = D_rcm_init
+        self.constrained_plane_list_si = constrained_plane_list_si
+        self.constrained_plane_list_lg = constrained_plane_list_lg
+        self.rotation_c_plane_list = rotation_c_plane_list
+        self.rotation_c_plane_unified_list = rotation_c_plane_unified_list
+
+    def planar_positioning_controller(self, task_iteration, planar_error):
         """
+        The controller moves the instrument from its initial position to t_planar,d (td_si), which is projected to the
+        target position in the retina. The light guide autonomously move in order to keep the constraints while “softly” prioritizing the
+        instrument motion. The inequality constraints simultaneously enforce the vitreoretinal task constraints and shadow-based
+        autonomous positioning constraints using VFIs. This step converges successfully when the error norm goes below the threshold.
+        See Section V of Koyama et al. (2022) for more details.
         """
         i = 0
         planar_iteration = 0
         r = rospy.Rate(self.parameter.fps)
-        axis = k_
+        axis = self.parameter.axis
         norm_delta_theta = 0
+
         while planar_error > self.parameter.threshold_planar_positioning_pixel:
             # print(planar_error)
             start = time.time()
-            i = i + 1
+            i += 1
 
+            # Stop the planar positioning if the iteration exceeds 10000
             planar_iteration = planar_iteration + 1
             if planar_iteration > 10000:
                 break
 
-            if i < total_iteration:
-                td_si = t_start + DQ(vec4(td_error) * i / total_iteration)
+            # Gradually move the tooltip to the target position
+            if i < task_iteration:
+                td_si = self.t_start + DQ(vec4(self.td_error) * i / task_iteration)
             else:
-                td_si = t_start + td_error
+                td_si = self.t_start + self.td_error  # Ensure the tooltip reaches the target position
+            
+            self.vi.set_object_translation(self.sim_setup.td_1_vrep_name, td_si)
 
-            xd_lg = vi.get_object_pose(self.sim_setup.lg_vrep_name)
-            td_lg = translation(xd_lg)
+            # Get current poses
+            (xd_si, xd_lg, td_lg, rd_si, x_si, x_lg, jointx_si, jointx_lg, 
+             jointx_comb, t_si, t_lg, r_si, r_lg, l_si, l_lg
+            ) = pos_help.calculate_poses(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, self.sim_setup, self.vi)
 
-            # Get current poses and Jacobians
-            x_si = robot_si.fkm(theta_si)
-            x_lg = robot_lg.fkm(theta_lg)
-            t_si = translation(x_si)
-            t_lg = translation(x_lg)
-            r_si = rotation(x_si)
-            r_lg = rotation(x_lg)
-            l_si = normalize(r_si * axis * conj(r_si))
-            l_lg = normalize(r_lg * axis * conj(r_lg))
+            # Get the current RCM positions, eyeball rotation and set the positions          
+            (rcm_current_si, rcm_current_lg, r_o_e 
+            ) = pos_help.calculate_and_set_rcm_positions(
+            t_si, t_lg, l_si, l_lg, self.eye, self.rcm_init_si, self.rcm_init_lg, om_kinematics, self.sim_setup, self.vi)
 
-            rcm_current_si, rcm_current_lg = om_kinematics.get_current_rcm_translations(t_si, t_lg, l_si, l_lg,
-                                                                                        eye.eyeball_t, eye.eyeball_radius)
-            r_o_e = om_kinematics.get_eyeball_rotation(eye.eyeball_t, eye.eyeball_radius, rcm_init_si, rcm_init_lg,
-                                                       rcm_current_si, rcm_current_lg)
-            vi.set_object_rotation(self.sim_setup.eyeball_vrep_name, r_o_e)
-            vi.set_object_translation(self.sim_setup.rcm_si_vrep_name, rcm_current_si)
-            vi.set_object_translation(self.sim_setup.rcm_lg_vrep_name, rcm_current_lg)
+            # Get the shadow tip position and set the position
+            shadow_tip_dq = self.eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
+            pos_help.set_tip_positions(self.sim_setup, self.vi, x_si, x_lg, shadow_tip_dq)
 
-            shadow_tip_dq = eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
-            vi.set_object_pose(self.sim_setup.si_vrep_name, x_si)
-            vi.set_object_pose(self.sim_setup.lg_vrep_name, x_lg)
-            vi.set_object_pose(self.sim_setup.shadow_vrep_name, shadow_tip_dq)
-
-            # if i > total_iteration / 2:
-            #     i = 0
-            #     t_start = t_si
-            #     td_error, total_iteration = target_points.get_translation_error(target_pixel,
-            #                                                                     self.parameter.si_velocity_planar,
-            #                                                                     self.parameter.tau)
-            #     vi.set_object_translation("tool_tip_d2", t_si + td_error)
+            # Update the td_error, target point, start position, and task_iteration to improve the accuracy and efficiency of reaching the target position.
+            if functions.is_physical_robot():
+                if i > task_iteration / 2:
+                    i = 0
+                    self.t_start = t_si
+                    self.td_error, task_iteration = self. target_points.get_translation_error(self.target_pixel,
+                                                                                              self.parameter.si_velocity_planar,
+                                                                                              self.parameter.tau)
+                    self.vi.set_object_translation(self.sim_setup.td_2_vrep_name, t_si + self.td_error)
 
             # Get Jacobians related to the current tooltip poses
-            J_si = robot_si.pose_jacobian(theta_si)
-            Jt_si = robot_si.translation_jacobian(J_si, x_si)
-            Jr_si = DQ_Kinematics.rotation_jacobian(J_si)
-            Jl_si = (haminus4(axis * conj(r_si)) + hamiplus4(r_si * axis) @ C4()) @ Jr_si
-            J_lg = robot_lg.pose_jacobian(theta_lg)
-            Jt_lg = robot_lg.translation_jacobian(J_lg, x_lg)
-            Jr_lg = DQ_Kinematics.rotation_jacobian(J_lg)
-            Jl_lg = (haminus4(axis * conj(r_lg)) + hamiplus4(r_lg * axis) @ C4()) @ Jr_lg
-
-            # Define errors
-            td_eye = conj(r_o_e) * (td_si - eye.eyeball_t) * r_o_e
-            e_si = np.array([vec4(t_si - td_si)])
-            e_lg = np.array([vec4(t_lg - td_lg)])
+            (J_si, Jt_si, Jr_si, Jl_si, Jr_rd_si, J_lg, Jt_lg, Jr_lg, Jl_lg
+            ) = pos_help.calculate_jacobians(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, x_si, x_lg, r_si, r_lg, rd_si)
+           
+            # Calculate the errors of the eyeball and instruments
+            td_eye, e_si_t, e_si_r, e_lg_t = pos_help.calculate_errors(xd_si, xd_lg, td_si, x_si, t_si, t_lg, r_o_e, self.eye, kine_func)
 
             # Get the inequality constraints for safety
-            W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.rcm_si_t,
-                                                               eye.rcm_lg_t, eye.eyeball_t, self.parameter,
-                                                               constrained_plane_list_si, constrained_plane_list_lg)
-            W_conical, w_conical = EyeVFI.get_conical_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.ws_t, self.parameter)
+            W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.rcm_si_t,
+                                                               self.eye.rcm_lg_t, self.eye.eyeball_t, self.parameter,
+                                                               self.constrained_plane_list_si, self.constrained_plane_list_lg, r_o_e)
+            
+            # Get the inequality constraints for the proposed method
+            W_conical, w_conical = EyeVFI.get_conical_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.ws_t, self.parameter)
+
+            # Get the inequality constraints for orbital manipulation
             if self.parameter.om_version_icra_ver:
-                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(robot_si, robot_lg, theta_si,
-                                                                                  theta_lg,
-                                                                                  eye.eyeball_t, eye.eyeball_radius,
-                                                                                  self.parameter, D_rcm_init,
-                                                                                  rotation_c_plane_list)
+                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(self.robot_si, self.robot_lg, self.theta_si,
+                                                                                  self.theta_lg,
+                                                                                  self.eye.eyeball_t, self.eye.eyeball_radius,
+                                                                                  self.parameter, self.D_rcm_init,
+                                                                                  self.rotation_c_plane_list)
             else:
-                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs(robot_si, robot_lg, theta_si, theta_lg,
-                                                                         eye.eyeball_t, eye.eyeball_radius, self.parameter,
-                                                                         D_rcm_init, r_o_e, rcm_init_si, rcm_init_lg,
-                                                                         rotation_c_plane_unified_list, theta_rotation_angle)
+                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg,
+                                                                         self.eye.eyeball_t, self.eye.eyeball_radius, self.parameter,
+                                                                         self.D_rcm_init, r_o_e, self.rcm_init_si, self.rcm_init_lg,
+                                                                         self.rotation_c_plane_unified_list)
             W = np.vstack([W_vitreo,
                            W_conical,
                            W_om])
@@ -131,227 +158,169 @@ class AutonomousPositioningControllers:
                            w_conical,
                            w_om])
 
-            eye_rotation_jacobian = om_kinematics.get_eyeball_rotation_jacobian(Jt_si, Jt_lg, Jl_si, Jl_lg, t_si, t_lg,
-                                                                                l_si, l_lg,
-                                                                                rcm_current_si, rcm_current_lg,
-                                                                                eye.eyeball_t, eye.eyeball_radius,
-                                                                                rcm_init_si, rcm_init_lg)
-
-            eyeball_jacobian = om_kinematics.get_eyeball_jacobian(Jt_si, Jt_lg, Jl_si, Jl_lg,
-                                                                  t_si, t_lg, l_si, l_lg, rcm_current_si,
-                                                                  rcm_current_lg,
-                                                                  eye.eyeball_t, eye.eyeball_radius, rcm_init_si,
-                                                                  rcm_init_lg, td_eye)
-            H1 = self.parameter.beta * eyeball_jacobian.T @ eyeball_jacobian
-            A1 = np.vstack([np.zeros([4, 12]),
-                            np.hstack([np.zeros([4, 6]), Jt_lg])])
-            H2 = (1 - self.parameter.beta) * A1.T @ A1
-            H3 = self.parameter.eyeball_damping * eye_rotation_jacobian.T @ eye_rotation_jacobian
-            H = H1 + H2 + H3
-
-            c1 = 2 * self.parameter.beta * self.parameter.n * (eyeball_jacobian.T @ e_si.T)
-            A2 = np.vstack([np.zeros([6, 1]),
-                            Jt_lg.T @ e_lg.T])
-            c2 = 2 * (1 - self.parameter.beta) * self.parameter.n * A2
-            c = c1 + c2
+            # Calculate the eye jacobians
+            (eye_rotation_jacobian, eyeball_jacobian_t, eyeball_jacobian_r
+            ) = pos_help.get_eye_jacobians(Jt_si, Jt_lg, Jl_si, Jr_rd_si, Jl_lg, t_si, t_lg, l_si, l_lg, rcm_current_si, rcm_current_lg, 
+                                           self.eye, self.rcm_init_si, self.rcm_init_lg, td_eye, jointx_si, jointx_lg, om_kinematics)
+            
+            # Calculate the decision variables
+            H, c = pos_help.decision_variable_calculation(eyeball_jacobian_t, eyeball_jacobian_r, eye_rotation_jacobian, Jt_lg, e_si_t, e_lg_t, e_si_r,
+                                                          jointx_comb, jointx_si, self.parameter.n_planar, self.parameter.damping_planar, self.parameter)
 
             if self.parameter.solver == 0:
                 w = w.reshape(w.shape[0])
-                c = c.reshape(12)
+                c = c.reshape(jointx_comb)
 
-            delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H + self.parameter.damping * self.parameter.B_12),
-                                                                  c, W, w, np.zeros([1, 12]), np.zeros([1, 1]))
+            # Quadratic programming for the planar positioning
+            delta_thetas = self.qp_solver.solve_quadratic_program(H, c, W, w, np.zeros([1, jointx_comb]), np.zeros([1, 1]))
 
-            theta_si = theta_si + delta_thetas[:6] * self.parameter.tau
-            theta_lg = theta_lg + delta_thetas[6:12] * self.parameter.tau
-            theta_si.reshape([6, 1])
-            theta_lg.reshape([6, 1])
+            # Update the theta joint positions and send the target joint positions to the robots
+            self.theta_si, self.theta_lg = pos_help.update_joint_positions(self.theta_si, self.theta_lg, delta_thetas, jointx_comb, 
+                                                                           self.robot_si_interface, self.robot_lg_interface, self.parameter)
 
             norm_delta_theta = norm_delta_theta + np.linalg.norm(delta_thetas)
 
-            # Send info to the robots
-            # robot_si_interface.send_target_joint_positions(theta_si)
-            # robot_lg_interface.send_target_joint_positions(theta_lg)
+            # Calculate distances and store the values 
+            shaft_distance, tip_distance = pos_help.store_distances(x_si, shadow_tip_dq, self.eye, self.parameter, functions, self.predict)
+            
+            if functions.is_physical_robot():
+                planar_error = self.target_points.get_planar_error(self.target_pixel)
+            else:
+                x_si = self.robot_si.fkm(self.theta_si)
+                t_si = translation(x_si)
+                planar_error = (np.linalg.norm(vec4(self.t_start + self.td_error - t_si)) * 10 ** 3) * self.parameter.converter_per_mm
 
-            # Store values
-            # shaft_distance = predict.shaft_distance
-            # tip_distance = predict.tip_distance
+            store_data = np.hstack(
+                [self.theta_si.T, self.theta_lg.T, delta_thetas, shaft_distance, tip_distance, planar_error, self.predict.counter_sum, 1,
+                0, vec8(x_si), vec8(x_lg), vec8(td_si), vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e)])
+            self.store.send_store_data("kinematics", store_data)
 
-            # store_data = np.vstack(
-            #     [np.array([theta_si]).T, np.array([theta_lg]).T, delta_thetas.reshape([12, 1]), shaft_distance,
-            #      tip_distance, predict.counter_sum, 0, vec4(td_si).reshape([4, 1]), 0])
-            # store.send_store_data("kinematics", store_data)
+            if self.parameter.enable_sleep:
+                r.sleep()
 
-            x_si = robot_si.fkm(theta_si)
-            t_si = translation(x_si)
-
-            planar_error = (np.linalg.norm(vec4(t_start + td_error - t_si)) * 10 ** 3) * self.parameter.converter_per_mm
-
-            # if self.parameter.enable_sleep:
-            #     r.sleep()
-
-            # data_logger.log("hz_planar", float(1 / (time.time() - start)))
+            self. data_logger.log("hz_planar", float(1 / (time.time() - start)))
 
             if self.parameter.print_time:
                 print("[" + rospy.get_name() + "]:: " + str(int(1 / (time.time() - start))) + " Hz")
 
-        return planar_iteration, theta_si, theta_lg, norm_delta_theta
+        return planar_iteration, norm_delta_theta, shadow_tip_dq
 
-    def overlap_prevention_controller(self, robot_si, robot_lg, robot_si_interface, robot_lg_interface,
-                                      theta_si, theta_lg,
-                                      rcm_init_si, rcm_init_lg,
-                                      threshold_overlap_prevention, t_current_si, target_pixel, eye, shaft_distance,
-                                      constrained_plane_list_si, constrained_plane_list_lg,
-                                      predict, store, data_logger, target_points, vi):
+
+    def overlap_prevention_controller(self, t_si_above_target, threshold_overlap_prevention, shaft_distance, tip_distance):
         """
+        The controller prevents the overlap between the instrument and its shadow. This can be achieved by moving the 
+        light guide as far as possible from constrained plane_OP. See Section VI of Koyama et al. (2022) for more details.
         """
         i = 0
         r = rospy.Rate(self.parameter.fps)
-        axis = k_
+        axis = self.parameter.axis
+
         while shaft_distance < threshold_overlap_prevention:
             # print(shaft_distance)
-            target_points.publish_current_step(2)
             start = time.time()
+            i += 1
 
-            # if the overlap prevention step is not completed after 10000 iterations, this step is finished.
+            # Stop the overlap prevention if the iteration exceeds 10000
             if i > 10000:
                 self.fail_position_list = np.vstack([self.fail_position_list,
-                                                     vec4(target_pixel)])
+                                                     vec4(DQ(self.target_pixel))])
                 break
 
-            i = i + 1
+            # Set the instrument's desired translation to current position as the light guide will translate
+            td_si = t_si_above_target
 
-            # Set the desired translation
-            td_si = t_current_si
+            # Get current poses
+            (xd_si, xd_lg, td_lg, rd_si, x_si, x_lg, jointx_si, jointx_lg, 
+             jointx_comb, t_si, t_lg, r_si, r_lg, l_si, l_lg
+            ) = pos_help.calculate_poses(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, self.sim_setup, self.vi)
 
-            # Get current poses and Jacobians
-            x_si = robot_si.fkm(theta_si)
-            x_lg = robot_lg.fkm(theta_lg)
-            t_si = translation(x_si)
-            t_lg = translation(x_lg)
-            r_si = rotation(x_si)
-            J_si = robot_si.pose_jacobian(theta_si)
-            Jt_si = robot_si.translation_jacobian(J_si, x_si)
-            Jr_1 = DQ_Kinematics.rotation_jacobian(J_si)
-            J_lg = robot_lg.pose_jacobian(theta_lg)
-            Jt_lg = robot_lg.translation_jacobian(J_lg, x_lg)
+           # Get the current RCM positions, eyeball rotation and set the positions          
+            (rcm_current_si, rcm_current_lg, r_o_e 
+            ) = pos_help.calculate_and_set_rcm_positions(
+            t_si, t_lg, l_si, l_lg, self.eye, self.rcm_init_si, self.rcm_init_lg, om_kinematics, self.sim_setup, self.vi)
 
-            r_si = rotation(x_si)
-            r_lg = rotation(x_lg)
-            l_si = normalize(r_si * axis * conj(r_si))
-            l_lg = normalize(r_lg * axis * conj(r_lg))
+            # Get the shadow tip position and set the position
+            shadow_tip_dq = self.eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
+            pos_help.set_tip_positions(self.sim_setup, self.vi, x_si, x_lg, shadow_tip_dq)
 
-            rcm_current_si, rcm_current_lg = om_kinematics.get_current_rcm_translations(t_si, t_lg, l_si, l_lg,
-                                                                                        eye.eyeball_t,
-                                                                                        eye.eyeball_radius)
-            r_o_e = om_kinematics.get_eyeball_rotation(eye.eyeball_t, eye.eyeball_radius, rcm_init_si, rcm_init_lg,
-                                                       rcm_current_si, rcm_current_lg)
-
-            shadow_tip_dq = eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
-            vi.set_object_pose(self.sim_setup.si_vrep_name, x_si)
-            vi.set_object_pose(self.sim_setup.lg_vrep_name, x_lg)
-            vi.set_object_pose(self.sim_setup.shadow_vrep_name, shadow_tip_dq)
+            # Get Jacobians related to the current tooltip poses
+            (J_si, Jt_si, Jr_si, Jl_si, Jr_rd_si, J_lg, Jt_lg, Jr_lg, Jl_lg
+             ) = pos_help.calculate_jacobians(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, x_si, x_lg, r_si, r_lg, rd_si)
 
             # Get the inequality constraints for safety
-            W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.rcm_si_t,
-                                                               eye.rcm_lg_t, eye.eyeball_t, self.parameter,
-                                                               constrained_plane_list_si, constrained_plane_list_lg)
-            W_conical, w_conical = EyeVFI.get_conical_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.ws_t,
+            W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.rcm_si_t,
+                                                               self.eye.rcm_lg_t, self.eye.eyeball_t, self.parameter,
+                                                               self.constrained_plane_list_si, self.constrained_plane_list_lg)
+            W_conical, w_conical = EyeVFI.get_conical_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.ws_t,
                                                            self.parameter)
 
             # Get the equality constraints
-            Aeq = np.vstack([np.hstack([Jt_si, np.zeros([4, 6])]),
-                             np.zeros([4, 12])])
+            Aeq = np.vstack([np.hstack([Jt_si, np.zeros([4, jointx_lg])]),
+                             np.zeros([4, jointx_comb])])
             beq = np.zeros([8, 1])
 
-            # Quadratic programming for the overlap prevention
             W = np.vstack([W_vitreo,
                            W_conical])
             w = np.vstack([w_vitreo,
                            w_conical])
 
-            J_second_task = EyeVFI.get_second_task_distance_jacobian(Jt_si, Jt_lg, Jr_1, t_si, t_lg, r_si)
+            J_second_task = EyeVFI.get_second_task_distance_jacobian(Jt_si, Jt_lg, Jr_si, t_si, t_lg, r_si, jointx_comb)
             H1 = J_second_task.T @ J_second_task
             c = -2 * J_second_task.T * self.parameter.D_velocity
-
-            H2 = np.vstack([np.hstack([self.parameter.damping_overlap_instrument * np.eye(6), np.zeros([6, 6])]),
-                            np.hstack([np.zeros([6, 6]), self.parameter.damping_overlap_light * np.eye(6)])])
+            
+            H2 = np.vstack([np.hstack([self.parameter.damping_overlap_instrument * np.eye(jointx_si), np.zeros([jointx_si, jointx_lg])]),
+                            np.hstack([np.zeros([jointx_lg, jointx_si]), self.parameter.damping_overlap_light * np.eye(jointx_lg)])])
+            H = 2 * (H1 + H2)
 
             if self.parameter.solver == 0:
                 w = w.reshape(w.shape[0])
-                c = c.reshape(12)
+                c = c.reshape(jointx_comb)
 
-            delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H1 + H2), c, W, w, Aeq, beq)
+            # Quadratic programming for the overlap prevention
+            delta_thetas = self.qp_solver.solve_quadratic_program(H, c, W, w, Aeq, beq)
 
-            # Update thetas
-            theta_si = theta_si + delta_thetas[:6] * self.parameter.tau
-            theta_lg = theta_lg + delta_thetas[6:12] * self.parameter.tau
-            theta_si.reshape([6, 1])
-            theta_lg.reshape([6, 1])
+            # Update the theta joint positions and send the target joint positions to the robots
+            self.theta_si, self.theta_lg = pos_help.update_joint_positions(self.theta_si, self.theta_lg, delta_thetas, jointx_comb, 
+                                                                           self.robot_si_interface, self.robot_lg_interface, self.parameter)
 
-            # Send info to the robots
-            robot_si_interface.send_target_joint_positions(theta_si)
-            robot_lg_interface.send_target_joint_positions(theta_lg)
+            # Calculate distances, errors and store the values 
+            shaft_distance, tip_distance = pos_help.store_distances(x_si, shadow_tip_dq, self.eye, self.parameter, functions, self.predict)
+            if functions.is_physical_robot():
+                planar_error = self.target_points.get_planar_error(self.target_pixel)
+            else:
+                planar_error = (np.linalg.norm(vec4(self.td_error))*10**3)*self.parameter.converter_per_mm
 
-            # Store values
-            shaft_distance = (eye.get_shaft_shadow_tip_distance(shadow_tip_dq, x_si)*10**3)*self.parameter.converter_per_mm
-            tip_distance = eye.get_tip_shadow_tip_distance(shadow_tip_dq, x_si)
-            # if not functions.is_physical_robot():
-            #     shaft_distance = eye.get_shaft_shadow_tip_distance(shadow_tip_dq, x_si)
-            #     if self.parameter.print_error:
-            #         print(shaft_distance)
-            #     tip_distance = eye.get_tip_shadow_tip_distance(shadow_tip_dq, x_si)
-            # else:
-            #     shaft_distance = predict.shaft_distance
-            #     tip_distance = predict.tip_distance
+            second_task_velocity = J_second_task @ delta_thetas
 
-            # planar_error = target_points.get_planar_error(target_pixel)
-
-            # second_task_velocity = J_second_task @ delta_thetas.reshape([12, 1])
-            # store_data = np.vstack(
-            #     [np.array([theta_si]).T, np.array([theta_lg]).T, delta_thetas.reshape([12, 1]), shaft_distance,
-            #      tip_distance, planar_error, predict.counter_sum, 1, vec4(td_si).reshape([4, 1]),
-            #      second_task_velocity])
-            # store.send_store_data("kinematics", store_data)
+            store_data = np.hstack(
+                [self.theta_si.T, self.theta_lg.T, delta_thetas, shaft_distance, tip_distance, planar_error, self.predict.counter_sum, 2,
+                second_task_velocity, vec8(x_si), vec8(x_lg), vec8(td_si), vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e)])
+            self.store.send_store_data("kinematics", store_data)
 
             if self.parameter.enable_sleep:
                 r.sleep()
 
-            data_logger.log("hz_overlap", float(1 / (time.time() - start)))
+            self. data_logger.log("hz_overlap", float(1 / (time.time() - start)))
 
             if self.parameter.print_time:
                 print("[" + rospy.get_name() + "]:: " + str(int(1 / (time.time() - start))) + " Hz")
 
-        return self.fail_position_list, i
+        if i == 0:
+            print("Overlap prevention is not required.")
 
-    def vertical_positioning_controller(self, robot_si, robot_lg, robot_si_interface, robot_lg_interface,
-                                        theta_si, theta_lg,
-                                        threshold_vertical_positioning, total_iteration, td_error, planar_error, target_pixel,
-                                        t_current_si,
-                                        eye, rcm_init_si, rcm_init_lg, D_rcm_init,
-                                        constrained_plane_list_si, constrained_plane_list_lg,
-                                        rotation_c_plane_list, rotation_c_plane_unified_list,
-                                        predict, store, data_logger, target_points, vi):
+        return tip_distance, i
+
+
+    def vertical_positioning_controller(self, t_current_si, tip_distance, depth, t_target, threshold_vertical_positioning, task_iteration, total_planar_iteration):
         """
+        This controller's main goal is to get the tip of the surgical instrument onto the retina precisely, so we prioritize 
+        the motion of the instrument over that of the light guide. See Section VII of Koyama et al. (2022) for more details.
         """
-        tip_distance = predict.tip_distance
         i = 0
         j = 0
-
-        td_error, total_planar_iteration = target_points.get_translation_error(target_pixel,
-                                                                               self.parameter.si_velocity_planar2,
-                                                                               self.parameter.tau)
-        ex_td_error = td_error
-
-        t1_above_target = t_current_si
-        print(total_planar_iteration)
-        depth = eye.get_vertical_depth(t1_above_target)
-        total_iteration = kine_func.get_p2p_iteration(self.parameter.tau, depth * k_,
-                                                      self.parameter.si_velocity_vertical)
-        t_target = t1_above_target - depth * k_ + td_error
-        vi.set_object_translation("tool_tip_d2", t1_above_target - depth * k_ + td_error)
-
         r = rospy.Rate(self.parameter.fps)
+        axis = self.parameter.axis
+
         while tip_distance >= threshold_vertical_positioning:
             start = time.time()
 
@@ -360,137 +329,474 @@ class AutonomousPositioningControllers:
                 break
 
             # Count how many times the tip distance achieves the threshold
-            current_counter_sum = predict.counter_sum
+            current_counter_sum = self.predict.counter_sum
 
             # Continue vertical positioning till the tip distance achieves the threshold certain times
             if current_counter_sum <= self.parameter.tip_dis_count:
-                i = i + 1
-                j = j + 1
+                i += 1
+                j += 1
 
                 # Set the desired translation
-                if i < total_iteration + 500:
-                    td_si = t1_above_target - (depth / total_iteration * i) * k_ + DQ(
-                        vec4(td_error) * j / total_planar_iteration)
-                    # td_si = t1_above_target - (depth / total_iteration * i) * k_
+                if i < task_iteration + 500:
+                    if functions.is_physical_robot():
+                        td_si = t_current_si - (depth / task_iteration * i) * k_ + DQ(vec4(self.td_error) * j / total_planar_iteration)
+                    else: 
+                        td_si = t_current_si - (depth / task_iteration * i) * k_
                 else:
-                    # td_si = td_si + DQ(vec4(td_error) * j / total_planar_iteration)
+                    # td_si = td_si + DQ(vec4(self.td_error) * j / total_planar_iteration)
                     td_si = td_si
 
-                vi.set_object_translation("tool_tip_d1", td_si)
+                self.vi.set_object_translation(self.sim_setup.td_1_vrep_name, td_si)
 
-                # Get current poses and Jacobians
-                x_si = robot_si.fkm(theta_si)
-                x_lg = robot_lg.fkm(theta_lg)
-                t_si = translation(x_si)
-                t_lg = translation(x_lg)
-                r1 = rotation(x_si)
-                J_si = robot_si.pose_jacobian(theta_si)
-                Jt_si = robot_si.translation_jacobian(J_si, x_si)
-                Jr_1 = DQ_Kinematics.rotation_jacobian(J_si)
-                J_lg = robot_lg.pose_jacobian(theta_lg)
-                Jt_lg = robot_lg.translation_jacobian(J_lg, x_lg)
+                # Get current poses
+                (xd_si, xd_lg, td_lg, rd_si, x_si, x_lg, jointx_si, jointx_lg, 
+                jointx_comb, t_si, t_lg, r_si, r_lg, l_si, l_lg
+                ) = pos_help.calculate_poses(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, self.sim_setup, self.vi)
 
-                shadow_tip_dq = eye.get_shadow_tip_position(x_si, x_lg)
-                vi.set_object_pose("instrument_tip", x_si)
-                vi.set_object_pose("light_tip", x_lg)
-                vi.set_object_pose("shadow_tip", shadow_tip_dq)
+                # Get the current RCM positions, eyeball rotation and set the positions          
+                (rcm_current_si, rcm_current_lg, r_o_e 
+                ) = pos_help.calculate_and_set_rcm_positions(
+                t_si, t_lg, l_si, l_lg, self.eye, self.rcm_init_si, self.rcm_init_lg, om_kinematics, self.sim_setup, self.vi)
 
-                if j == total_planar_iteration:
-                    j = 0
-                    i = 0
-                    t1_above_target = td_si
-                    td_error, total_planar_iteration = target_points.get_translation_error(target_pixel,
-                                                                                           self.parameter.si_velocity_planar2,
-                                                                                           self.parameter.tau)
-                    vi.set_object_translation("tool_tip_d2", t_target + td_error)
-                    t_target = t_target + td_error
+                # Get the shadow tip position and set the position
+                shadow_tip_dq = self.eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
+                pos_help.set_tip_positions(self.sim_setup, self.vi, x_si, x_lg, shadow_tip_dq)
+
+                if functions.is_physical_robot():
+                    if j == total_planar_iteration:
+                        j = 0
+                        i = 0
+                        t_current_si = td_si
+                        self.td_error, total_planar_iteration = self.target_points.get_translation_error(self.target_pixel,
+                                                                                                         self.parameter.si_velocity_planar2,
+                                                                                                         self.parameter.tau)
+                        self.vi.set_object_translation(self.sim_setup.td_2_vrep_name, t_target + self.td_error)
+                        t_target = t_target + self.td_error
+
+                # Get Jacobians related to the current tooltip poses
+                (J_si, Jt_si, Jr_si, Jl_si, Jr_rd_si, J_lg, Jt_lg, Jr_lg, Jl_lg
+                ) = pos_help.calculate_jacobians(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, x_si, x_lg, r_si, r_lg, rd_si)
+            
+                # Calculate the errors of the eyeball and instruments
+                td_eye, e_si_t, e_si_r, e_lg_t = pos_help.calculate_errors(xd_si, xd_lg, td_si, x_si, t_si, t_lg, r_o_e, self.eye, kine_func)
 
                 # Get the inequality constraints for safety
-                W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs_for_two_manipulator(robot_si, robot_lg, theta_si,
-                                                                                       theta_lg, eye.rcm_si_t,
-                                                                                       eye.rcm_lg_t,
-                                                                                       eye.ws_t,
-                                                                                       constrained_planes_si,
-                                                                                       constrained_planes_lg,
-                                                                                       self.parameter)
+                W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.rcm_si_t,
+                                                                   self.eye.rcm_lg_t, self.eye.eyeball_t, self.parameter,
+                                                                   self.constrained_plane_list_si, self.constrained_plane_list_lg)
 
+                # Get the inequality constraints for safety
+                W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.rcm_si_t,
+                                                                   self.eye.rcm_lg_t, self.eye.eyeball_t, self.parameter,
+                                                                   self.constrained_plane_list_si, self.constrained_plane_list_lg)
+                
                 # Get the inequality constraints for the proposed method
-                W_conical, w_conical = EyeVFI.get_conical_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.ws_t,
-                                                               self.parameter)
+                W_conical, w_conical = EyeVFI.get_conical_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.ws_t, self.parameter)
 
-                # Quadratic programming for the first task of the vertical positioning
+                if self.parameter.om_version_icra_ver:
+                    W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(self.robot_si, self.robot_lg, self.theta_si,
+                                                                                      self.theta_lg,
+                                                                                      self.eye.eyeball_t, self.eye.eyeball_radius,
+                                                                                      self.parameter, self.D_rcm_init,
+                                                                                      self.rotation_c_plane_list)
+                else:
+                    W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg,
+                                                                             self.eye.eyeball_t, self.eye.eyeball_radius, self.parameter,
+                                                                             self.D_rcm_init, r_o_e, self.rcm_init_si, self.rcm_init_lg,
+                                                                             self.rotation_c_plane_unified_list)
                 W = np.vstack([W_vitreo,
-                               W_conical])
+                               W_conical,
+                               W_om])
                 w = np.vstack([w_vitreo,
-                               w_conical])
+                               w_conical,
+                               w_om])
+                
+                # Calculate the eye jacobians
+                (eye_rotation_jacobian, eyeball_jacobian_t, eyeball_jacobian_r
+                ) = pos_help.get_eye_jacobians(Jt_si, Jt_lg, Jl_si, Jr_rd_si, Jl_lg, t_si, t_lg, l_si, l_lg, rcm_current_si, rcm_current_lg, 
+                                               self.eye, self.rcm_init_si, self.rcm_init_lg, td_eye, jointx_si, jointx_lg, om_kinematics)
+                
+                
+                # Calculate the decision variables for vertical positioning. Instrument is calculated first, then light guide in second task.
+                if self.parameter.end_effector_rotation:
+                    # Quadratic coefficients of the decision variables
+                    A1 = self.parameter.alpha * eyeball_jacobian_t.T @ eyeball_jacobian_t
+                    A2 = (1 - self.parameter.alpha) * eyeball_jacobian_r.T @ eyeball_jacobian_r
+                    H1 = A1 + A2                                                                           # instrument                                           # light guide
+                    H2 = self.parameter.eyeball_damping * eye_rotation_jacobian.T @ eye_rotation_jacobian  # orbital manipulation
 
-                A = np.vstack([np.hstack([Jt_si, np.zeros([4, 6])]),
-                               np.zeros([4, 12])])
-                H1 = A.T @ A
-                e = np.vstack([np.array([vec4(t_si - td_si)]).T,
-                               np.zeros([4, 1])])
-                c = 2 * self.parameter.n_vertical * (A.T @ e)
-                c = c.reshape(12)
+                    # Linear coefficients of the decision variables
+                    A3 = self.parameter.alpha * eyeball_jacobian_t.T @ e_si_t.T  # instrument
+                    A4 = (1 - self.parameter.alpha) * eyeball_jacobian_r.T @ e_si_r.T
+                    c1 = A3 + A4  # instrument
+                    c = 2 *  self.parameter.n_vertical * c1
+                    
+                else:
+                    H1 = eyeball_jacobian_t.T @ eyeball_jacobian_t  # instrument
+                    H2 = self.parameter.eyeball_damping * eye_rotation_jacobian.T @ eye_rotation_jacobian  # orbital manipulation
 
-                H2 = np.vstack([np.hstack([self.parameter.damping_vertical_instrument * np.eye(6), np.zeros([6, 6])]),
-                                np.hstack([np.zeros([6, 6]), self.parameter.damping_vertical_light * np.eye(6)])])
-
-                delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H1 + H2), c, W, w_reshape,
-                                                                      np.zeros([1, 12]), np.zeros([1, 1]))
-
-                # Quadratic programming for the second task of the vertical positioning
-                J_second_task = EyeVFI.get_second_task_distance_jacobian(Jt_si, Jt_lg, Jr_1, t_si, t_lg, r1)
-                H1 = J_second_task.T @ J_second_task
-                c = -2 * J_second_task.T * self.parameter.D_velocity
-
-                Aeq = A
-                beq = A @ delta_thetas.reshape([12, 1])
+                    c1 = eyeball_jacobian_t.T @ e_si_t.T  # instrument
+                    c = 2 * self.parameter.n_vertical * c1
 
                 if self.parameter.solver == 0:
-                    c = c.reshape(12)
                     w = w.reshape(w.shape[0])
+                    c = c.reshape(jointx_comb)
+                
+                H3 = np.vstack([np.hstack([self.parameter.damping_vertical_instrument * np.eye(jointx_si), np.zeros([jointx_si, jointx_lg])]),
+                                np.hstack([np.zeros([jointx_lg, jointx_si]), self.parameter.damping_vertical_light * np.eye(jointx_lg)])])
 
-                delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H1 + H2), c, W, w, Aeq, beq)
+                delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H1 + H2 + H3), c, W, w, np.zeros([1, jointx_comb]), np.zeros([1, 1]))
 
-                # Update thetas
-                theta_si = theta_si + delta_thetas[:6] * self.parameter.tau
-                theta_lg = theta_lg + delta_thetas[6:12] * self.parameter.tau
-                theta_si.reshape([6, 1])
-                theta_lg.reshape([6, 1])
+                # Quadratic programming for the second task of the vertical positioning
+                J_second_task = EyeVFI.get_second_task_distance_jacobian(Jt_si, Jt_lg, Jr_si, t_si, t_lg, r_si, jointx_comb)
+                H1 = J_second_task.T @ J_second_task
 
-                # Send info to the robots
-                robot_si_interface.send_target_joint_positions(theta_si)
-                robot_lg_interface.send_target_joint_positions(theta_lg)
+                c = -(2 * J_second_task.T * self.parameter.D_velocity).flatten()
 
-                # Store values
-                if not functions.is_physical_robot():
-                    shaft_distance = eye.get_shaft_shadow_tip_distance(shadow_tip_dq, x_si)
-                    tip_distance = eye.get_tip_shadow_tip_distance(shadow_tip_dq, x_si)
-                    if self.parameter.print_distances:
-                        print(tip_distance)
+                if self.parameter.end_effector_rotation:
+                    Aeq = (eyeball_jacobian_t + eyeball_jacobian_r)  #(eyeball_jacobian_t + eyeball_jacobian_r + eye_rotation_jacobian) 
+                    beq = (eyeball_jacobian_t + eyeball_jacobian_r) @ delta_thetas.reshape([jointx_comb, 1])  #(eyeball_jacobian_t + eyeball_jacobian_r + eye_rotation_jacobian)
                 else:
-                    shaft_distance = predict.shaft_distance
-                    tip_distance = predict.tip_distance
+                    Aeq = eyeball_jacobian_t  #(eyeball_jacobian_t + eye_rotation_jacobian)
+                    beq = eyeball_jacobian_t @ delta_thetas.reshape([jointx_comb, 1])  #(eyeball_jacobian_t + eye_rotation_jacobian)
 
-                planar_error = target_points.get_planar_error(target_pixel)
+                delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H1 + H2 + H3), c, W, w, Aeq, beq)
 
-                second_task_velocity = J_second_task @ delta_thetas.reshape([12, 1])
-                # store_data = np.vstack(
-                #     [np.array([theta_si]).T, np.array([theta_lg]).T, delta_thetas.reshape([12, 1]), shaft_distance,
-                #      tip_distance, planar_error, current_counter_sum, 2, vec4(td_si).reshape([4, 1]),
-                #      second_task_velocity])
-                # store.send_store_data("kinematics", store_data)
+                # Update the theta joint positions and send the target joint positions to the robots
+                self.theta_si, self.theta_lg = pos_help.update_joint_positions(self.theta_si, self.theta_lg, delta_thetas, jointx_comb, 
+                                                                               self.robot_si_interface, self.robot_lg_interface, self.parameter)
+
+                # Calculate distances and store the values
+                shaft_distance, tip_distance = pos_help.store_distances(x_si, shadow_tip_dq, self.eye, self.parameter, functions, self.predict)
+                if functions.is_physical_robot():
+                    planar_error = self.target_points.get_planar_error(self.target_pixel)
+                else:
+                    planar_error = (np.linalg.norm(vec4(self.td_error))*10**3)*self.parameter.converter_per_mm
+                second_task_velocity = 0 # J_second_task @ delta_thetas
+
+                store_data = np.hstack(
+                    [self.theta_si.T, self.theta_lg.T, delta_thetas, shaft_distance, tip_distance, planar_error, self.predict.counter_sum, 3,
+                    second_task_velocity, vec8(x_si), vec8(x_lg), vec8(td_si), vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e)])
+                self.store.send_store_data("kinematics", store_data)
             else:
-                # store_data = np.vstack(
-                #     [np.array([theta_si]).T, np.array([theta_lg]).T, delta_thetas.reshape([12, 1]), shaft_distance,
-                #      tip_distance, planar_error, current_counter_sum, 3, vec4(td_si).reshape([4, 1]), 0])
-                # store.send_store_data("kinematics", store_data)
+                store_data = np.hstack(
+                    [self.theta_si.T, self.theta_lg.T, delta_thetas, shaft_distance, tip_distance, planar_error, self.predict.counter_sum, 3,
+                    0, vec8(x_si), vec8(x_lg), vec8(td_si), vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e)])
+                self.store.send_store_data("kinematics", store_data)
                 break
 
             if self.parameter.enable_sleep:
                 r.sleep()
 
-            data_logger.log("hz_vertical", float(1 / (time.time() - start)))
+            self. data_logger.log("hz_vertical", float(1 / (time.time() - start)))
 
             if self.parameter.print_time:
                 print("[" + rospy.get_name() + "]:: " + str(int(1 / (time.time() - start))) + " Hz")
+        
+        return delta_thetas, td_si
+            
+    def pause_before_additional(self, delta_thetas, threshold_vertical_positioning, td_si):
+        """
+        This function pauses the robot before the additional positioning step to calculate the 
+        additional distance that the instrument should move.
+        """
+        i = 0
+        axis = self.parameter.axis
+
+        while i < 1000:
+            i = i + 1
+            
+            x_si = self.robot_si.fkm(self.theta_si)
+            x_lg = self.robot_lg.fkm(self.theta_lg)
+            t_si = translation(x_si)
+            t_lg = translation(x_lg)
+            r_si = rotation(x_si)
+            r_lg = rotation(x_lg)
+            l_si = normalize(r_si * axis * conj(r_si))
+            l_lg = normalize(r_lg * axis * conj(r_lg))
+
+            rcm_current_si, rcm_current_lg = om_kinematics.get_current_rcm_translations(t_si, t_lg, l_si, l_lg, 
+                                                                                        self.eye.eyeball_t, self.eye.eyeball_radius)
+        
+            r_o_e = om_kinematics.get_eyeball_rotation(self.eye.eyeball_t, self.eye.eyeball_radius, 
+                                                       self.rcm_init_si, self.rcm_init_lg, rcm_current_si, rcm_current_lg)
+            shadow_tip_dq = self.eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
+            tip_distance = self.eye.get_tip_shadow_tip_distance(shadow_tip_dq, x_si)
+            
+            if functions.is_physical_robot():
+                shaft_distance = self.predict.shaft_distance
+                tip_distance = self.predict.tip_distance
+                planar_error = self.target_points.get_planar_error(self.target_pixel)
+            else:
+                x_si = self.robot_si.fkm(self.theta_si)
+                t_si = translation(x_si)
+                shaft_distance, tip_distance = pos_help.store_distances(x_si, shadow_tip_dq, self.eye, self.parameter, functions, self.predict)
+                planar_error = (np.linalg.norm(vec4(self.td_error))*10**3)*self.parameter.converter_per_mm
+            
+            store_data = np.hstack(
+                [self.theta_si.T, self.theta_lg.T, delta_thetas, shaft_distance, tip_distance, planar_error, self.predict.counter_sum, 4,
+                0, vec8(x_si), vec8(x_lg), vec8(td_si), vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e)])
+            self.store.send_store_data("kinematics", store_data)
+
+        # Calculate the additional distance
+        t1_vec4 = vec4(translation(self.robot_si.fkm(self.robot_si_interface.get_joint_positions())))
+        t2_vec4 = vec4(translation(self.robot_lg.fkm(self.robot_lg_interface.get_joint_positions())))
+        additional_depth = threshold_vertical_positioning / math.sqrt((t1_vec4[1] - t2_vec4[1])**2 + 
+                           (t1_vec4[2] - t2_vec4[2])**2) * (t2_vec4[3] - t1_vec4[3]) / self.parameter.converter_per_mm
+        additional_depth = additional_depth / 1000 + self.parameter.additional_positioning_margin
+
+        # Store the additional distance
+        store_data = np.array([additional_depth])
+        self.store.send_store_data("additional_depth", store_data)
+        time.sleep(.5)
+    
+        return additional_depth
+
+    
+    def additional_positioning_controller(self, t_current, additional_depth, task_iteration, total_planar_iteration):
+        """
+        This controller is used to add an additional distance to the vertical positioning step to ensure contact with the retina.
+        """
+        i = 0
+        j = 0
+        r = rospy.Rate(self.parameter.fps)
+        axis = self.parameter.axis
+
+        while i < task_iteration:
+        # while not contact_reporter_interface.contact:
+            start = time.time()
+            i += 1
+            j += 1
+
+            # Set the desired translation
+            # td_si = t_current - i * additional_depth/task_iteration*k_ + DQ(vec4(self.td_error) * j / total_planar_iteration)
+            td_si = t_current - i * additional_depth / task_iteration
+            self.vi.set_object_translation(self.sim_setup.td_1_vrep_name, td_si)
+
+             # Get current poses
+            (xd_si, xd_lg, td_lg, rd_si, x_si, x_lg, jointx_si, jointx_lg, 
+             jointx_comb, t_si, t_lg, r_si, r_lg, l_si, l_lg
+            ) = pos_help.calculate_poses(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, self.sim_setup, self.vi)
+
+            # Get the current RCM positions, eyeball rotation and set the positions          
+            (rcm_current_si, rcm_current_lg, r_o_e 
+            ) = pos_help.calculate_and_set_rcm_positions(
+            t_si, t_lg, l_si, l_lg, self.eye, self.rcm_init_si, self.rcm_init_lg, om_kinematics, self.sim_setup, self.vi)
+
+            # Get the shadow tip position and set the position
+            shadow_tip_dq = self.eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
+            pos_help.set_tip_positions(self.sim_setup, self.vi, x_si, x_lg, shadow_tip_dq)
+
+            if functions.is_physical_robot():
+                if j == total_planar_iteration:
+                    j = 0
+                    # i = 0
+                    # t_current = t_si
+                    self.td_error, total_planar_iteration = self.target_points.get_translation_error(self.target_pixel,
+                                                                                           self.parameter.si_velocity_planar2,
+                                                                                           self.parameter.tau)
+
+            # Get Jacobians related to the current tooltip poses
+            (J_si, Jt_si, Jr_si, Jl_si, Jr_rd_si, J_lg, Jt_lg, Jr_lg, Jl_lg
+            ) = pos_help.calculate_jacobians(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, x_si, x_lg, r_si, r_lg, rd_si)
+           
+            # Calculate the errors of the eyeball and instruments
+            td_eye, e_si_t, e_si_r, e_lg_t = pos_help.calculate_errors(xd_si, xd_lg, td_si, x_si, t_si, t_lg, r_o_e, self.eye, kine_func)
+
+             # Get the inequality constraints for safety
+            W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.rcm_si_t,
+                                                               self.eye.rcm_lg_t, self.eye.eyeball_t, self.parameter,
+                                                               self.constrained_plane_list_si, self.constrained_plane_list_lg)
+            
+            # Get the inequality constraints for the proposed method
+            W_conical, w_conical = EyeVFI.get_conical_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.ws_t, self.parameter)
+
+            if self.parameter.om_version_icra_ver:
+                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(self.robot_si, self.robot_lg, self.theta_si,
+                                                                                  self.theta_lg,
+                                                                                  self.eye.eyeball_t, self.eye.eyeball_radius,
+                                                                                  self.parameter, self.D_rcm_init,
+                                                                                  self.rotation_c_plane_list)
+            else:
+                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg,
+                                                                         self.eye.eyeball_t, self.eye.eyeball_radius, self.parameter,
+                                                                         self.D_rcm_init, r_o_e, self.rcm_init_si, self.rcm_init_lg,
+                                                                         self.rotation_c_plane_unified_list)
+            W = np.vstack([W_vitreo,
+                            W_conical,
+                            W_om])
+            w = np.vstack([w_vitreo,
+                            w_conical,
+                            w_om])
+            
+            # Calculate the eye jacobians
+            (eye_rotation_jacobian, eyeball_jacobian_t, eyeball_jacobian_r
+            ) = pos_help.get_eye_jacobians(Jt_si, Jt_lg, Jl_si, Jr_rd_si, Jl_lg, t_si, t_lg, l_si, l_lg, rcm_current_si, rcm_current_lg, 
+                                           self.eye, self.rcm_init_si, self.rcm_init_lg, td_eye, jointx_si, jointx_lg, om_kinematics)
+            
+            # Calculate the decision variables for vertical positioning. Instrument is calculated first, then light guide in second task.
+            if self.parameter.end_effector_rotation:
+                # Quadratic coefficients of the decision variables
+                A1 = self.parameter.alpha * eyeball_jacobian_t.T @ eyeball_jacobian_t
+                A2 = (1 - self.parameter.alpha) * eyeball_jacobian_r.T @ eyeball_jacobian_r
+                H1 = A1 + A2                                                                           # instrument    
+                H2 = self.parameter.eyeball_damping * eye_rotation_jacobian.T @ eye_rotation_jacobian  # orbital manipulation
+
+                # Linear coefficients of the decision variables
+                A3 = self.parameter.alpha * eyeball_jacobian_t.T @ e_si_t.T  # instrument
+                A4 = (1 - self.parameter.alpha) * eyeball_jacobian_r.T @ e_si_r.T
+                c1 = A3 + A4  # instrument
+                c = 2 *  self.parameter.n_vertical * c1
+                
+            else:
+                H1 = eyeball_jacobian_t.T @ eyeball_jacobian_t  # instrument
+                H2 = self.parameter.eyeball_damping * eye_rotation_jacobian.T @ eye_rotation_jacobian  # orbital manipulation
+
+                c1 = eyeball_jacobian_t.T @ e_si_t.T  # instrument
+                c = 2 * self.parameter.n_vertical * c1
+
+            if self.parameter.solver == 0:
+                w = w.reshape(w.shape[0])
+                c = c.reshape(jointx_comb)
+            
+            H3 = np.vstack([np.hstack([self.parameter.damping_vertical_instrument * np.eye(jointx_si), np.zeros([jointx_si, jointx_lg])]),
+                            np.hstack([np.zeros([jointx_lg, jointx_si]), self.parameter.damping_vertical_light * np.eye(jointx_lg)])])
+
+            delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H1 + H2 + H3), c, W, w, np.zeros([1, jointx_comb]), np.zeros([1, 1]))
+
+            # Quadratic programming for the second task of the vertical positioning
+            J_second_task = EyeVFI.get_second_task_distance_jacobian(Jt_si, Jt_lg, Jr_si, t_si, t_lg, r_si, jointx_comb)
+            H1 = J_second_task.T @ J_second_task
+
+            c = -(2 * J_second_task.T * self.parameter.D_velocity).flatten()
+
+            if self.parameter.end_effector_rotation:
+                Aeq = (eyeball_jacobian_t + eyeball_jacobian_r)  #(eyeball_jacobian_t + eyeball_jacobian_r + eye_rotation_jacobian) 
+                beq = (eyeball_jacobian_t + eyeball_jacobian_r) @ delta_thetas.reshape([jointx_comb, 1])  #(eyeball_jacobian_t + eyeball_jacobian_r + eye_rotation_jacobian)
+            else:
+                Aeq = eyeball_jacobian_t  #(eyeball_jacobian_t + eye_rotation_jacobian)
+                beq = eyeball_jacobian_t @ delta_thetas.reshape([jointx_comb, 1])  #(eyeball_jacobian_t + eye_rotation_jacobian)
+
+            delta_thetas = self.qp_solver.solve_quadratic_program(2 * (H1 + H2 + H3), c, W, w, Aeq, beq)
+
+            # Update the theta joint positions and send the target joint positions to the robots
+            self.theta_si, self.theta_lg = pos_help.update_joint_positions(self.theta_si, self.theta_lg, delta_thetas, jointx_comb, 
+                                                                           self.robot_si_interface, self.robot_lg_interface, self.parameter)
+
+            # Store values
+            shaft_distance, tip_distance = pos_help.store_distances(x_si, shadow_tip_dq, self.eye, self.parameter, functions, self.predict)
+            if functions.is_physical_robot():
+                planar_error = self.target_points.get_planar_error(self.target_pixel)
+            else:
+                planar_error = (np.linalg.norm(vec4(self.td_error))*10**3)*self.parameter.converter_per_mm
+            second_task_velocity = J_second_task @ delta_thetas
+
+            store_data = np.hstack(
+                [self.theta_si.T, self.theta_lg.T, delta_thetas, shaft_distance, tip_distance, planar_error, self.predict.counter_sum, 5,
+                second_task_velocity, vec8(x_si), vec8(x_lg), vec8(td_si), vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e)])
+            self.store.send_store_data("kinematics", store_data)
+
+            if self.parameter.enable_sleep:
+                r.sleep()
+
+            self. data_logger.log("hz_additional", float(1/(time.time()-start)))
+
+            if self.parameter.print_time:
+                print("[" + rospy.get_name() + "]:: " + str(int(1/(time.time()-start)))+" Hz")
+
+    
+    def return_to_above_point(self, t_current, trajectory_translation, task_iteration):
+        """
+        This function moves the surgical instrument back to the point above the target point.
+        """
+        i = 0
+        r = rospy.Rate(self.parameter.fps)
+        axis = self.parameter.axis
+
+        while i < task_iteration:
+            start = time.time()
+            i += 1
+
+            # Set the desired translation
+            td_si = t_current + DQ(vec4(trajectory_translation) * i / task_iteration)
+            self.vi.set_object_translation(self.sim_setup.td_1_vrep_name, td_si)
+            
+            # Get current poses
+            (xd_si, xd_lg, td_lg, rd_si, x_si, x_lg, jointx_si, jointx_lg, 
+             jointx_comb, t_si, t_lg, r_si, r_lg, l_si, l_lg
+            ) = pos_help.calculate_poses(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, self.sim_setup, self.vi)
+
+            # Get the current RCM positions, eyeball rotation and set the positions          
+            (rcm_current_si, rcm_current_lg, r_o_e 
+            ) = pos_help.calculate_and_set_rcm_positions(
+            t_si, t_lg, l_si, l_lg, self.eye, self.rcm_init_si, self.rcm_init_lg, om_kinematics, self.sim_setup, self.vi)
+
+            # Get the shadow tip position and set the position
+            shadow_tip_dq = self.eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
+            pos_help.set_tip_positions(self.sim_setup, self.vi, x_si, x_lg, shadow_tip_dq)
+
+            if functions.is_physical_robot():
+                if i > task_iteration / 2:
+                    i = 0
+                    self.t_start = t_si
+                    self.td_error, task_iteration = self.target_points.get_translation_error(self.target_pixel,
+                                                                                             self.parameter.si_velocity_vertical,
+                                                                                             self.parameter.tau)
+                    self.vi.set_object_translation(self.sim_setup.td_2_vrep_name, t_si + self.td_error)
+
+            # Get Jacobians related to the current tooltip poses
+            (J_si, Jt_si, Jr_si, Jl_si, Jr_rd_si, J_lg, Jt_lg, Jr_lg, Jl_lg
+            ) = pos_help.calculate_jacobians(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, axis, x_si, x_lg, r_si, r_lg, rd_si)
+           
+            # Calculate the errors of the eyeball and instruments
+            td_eye, e_si_t, e_si_r, e_lg_t = pos_help.calculate_errors(xd_si, xd_lg, td_si, x_si, t_si, t_lg, r_o_e, self.eye, kine_func)
+
+            # Get the inequality constraints for safety
+            W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.rcm_si_t,
+                                                               self.eye.rcm_lg_t, self.eye.eyeball_t, self.parameter,
+                                                               self.constrained_plane_list_si, self.constrained_plane_list_lg)
+            
+            # Get the inequality constraints for the proposed method
+            W_conical, w_conical = EyeVFI.get_conical_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg, self.eye.ws_t, self.parameter)
+
+            if self.parameter.om_version_icra_ver:
+                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(self.robot_si, self.robot_lg, self.theta_si,
+                                                                                  self.theta_lg,
+                                                                                  self.eye.eyeball_t, self.eye.eyeball_radius,
+                                                                                  self.parameter, self.D_rcm_init,
+                                                                                  self.rotation_c_plane_list)
+            else:
+                W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs(self.robot_si, self.robot_lg, self.theta_si, self.theta_lg,
+                                                                         self.eye.eyeball_t, self.eye.eyeball_radius, self.parameter,
+                                                                         self.D_rcm_init, r_o_e, self.rcm_init_si, self.rcm_init_lg,
+                                                                         self.rotation_c_plane_unified_list)
+            W = np.vstack([W_vitreo,
+                           W_conical,
+                           W_om])
+            w = np.vstack([w_vitreo,
+                           w_conical,
+                           w_om])
+
+            # Calculate the eye jacobians
+            (eye_rotation_jacobian, eyeball_jacobian_t, eyeball_jacobian_r
+            ) = pos_help.get_eye_jacobians(Jt_si, Jt_lg, Jl_si, Jr_rd_si, Jl_lg, t_si, t_lg, l_si, l_lg, rcm_current_si, rcm_current_lg, 
+                                           self.eye, self.rcm_init_si, self.rcm_init_lg, td_eye, jointx_si, jointx_lg, om_kinematics)
+            
+            # Calculate the decision variables
+            H, c = pos_help.decision_variable_calculation(eyeball_jacobian_t, eyeball_jacobian_r, eye_rotation_jacobian, Jt_lg, e_si_t, e_lg_t, e_si_r,
+                                                          jointx_comb, jointx_si, self.parameter.n_vertical, self.parameter.damping_planar, self.parameter)
+
+            if self.parameter.solver == 0:
+                w = w.reshape(w.shape[0])
+                c = c.reshape(jointx_comb)
+
+            delta_thetas = self.qp_solver.solve_quadratic_program(H, c, W, w, np.zeros([1, jointx_comb]), np.zeros([1, 1]))
+
+            # Update the theta joint positions and send the target joint positions to the robots
+            self.theta_si, self.theta_lg = pos_help.update_joint_positions(self.theta_si, self.theta_lg, delta_thetas, jointx_comb, 
+                                                                           self.robot_si_interface, self.robot_lg_interface, self.parameter)
+
+            if self.parameter.enable_sleep:
+                r.sleep()
+            if self.parameter.print_time:
+                print("[" + rospy.get_name() + "]:: " + str(int(1/(time.time()-start)))+" Hz")

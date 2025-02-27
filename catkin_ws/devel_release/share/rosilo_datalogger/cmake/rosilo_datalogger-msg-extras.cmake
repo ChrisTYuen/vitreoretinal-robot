@@ -1,1 +1,0 @@
-/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_datalogger/share/rosilo_datalogger/cmake/rosilo_datalogger-msg-extras.cmake

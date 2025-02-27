@@ -1,0 +1,16 @@
+{
+  "robot_type":"DQ_SerialManipulatorDH",
+  "angle_mode":"degree",
+  "convention":"standard",
+  "theta":[0],
+  "d":[0],
+  "a":[0],
+  "alpha":[0],
+  "types":[0],
+  "lower_q_limit":[-360],
+  "upper_q_limit":[360],
+  "lower_q_dot_limit":[-90],
+  "upper_q_dot_limit":[90],
+  "effector": [1, 0, 0, 0, 0, 0, 0, 0],
+  "reference_frame":[1]
+}

@@ -2,7 +2,6 @@
 # Import Relevant files from dqrobotics
 from dqrobotics import *
 from dqrobotics.interfaces.vrep import DQ_VrepInterface
-from robot_loader import Robot
 
 # import VS050RobotDH
 from sas_robot_driver import RobotDriverInterface
@@ -11,6 +10,7 @@ from sas_robot_driver import RobotDriverInterface
 from kinematics.parameters import physical_parameters
 from eyesurgery_controllers import EyesurgeryControllers
 from tools import functions
+from tools.robot_loader import Robot
 
 # For calculating the sampling time
 import time
@@ -20,6 +20,11 @@ import traceback
 import rospy
 
 try:
+    """
+    This script sets the RCM positions for the instruments. If the script is run with the physical robots, the robots
+    should be manually moved to the initial positions before running the script. Otherwise, the script will be run through
+    simulation and the robots will be moved to the initial positions automatically.
+    """
     rospy.init_node("set_rcm_positions", disable_signals=True)
 
     # Create VrepInterface object
@@ -60,19 +65,7 @@ try:
     robot_lg.set_reference_frame(vi.get_object_pose("VS050_reference#2")*setup.robot_lg_base_rel)
     time.sleep(0.02)
 
-    #################################TEST#########################################
-    # theta_lg = robot_lg_interface.get_joint_positions()
-    # theta_si = robot_si_interface.get_joint_positions()
-    # # theta_fa = robot_fa_interface.get_joint_positions()
-    # # # print("fa joints:", theta_fa)
-    # # print("si joints:", theta_si)
-    # # print("lg joints:", theta_lg)
-
-    # vi.set_object_pose("ref_si", robot_si.fkm(theta_si))  # relatively correct 
-    # vi.set_object_pose("ref_lg", robot_lg.fkm(theta_lg))  # relatively correct
-    #################################TEST#########################################
-
-    # # Set the manipulators to the initial pose
+    # Set the manipulators to the initial pose
     theta_si, theta_lg = controller.set_manipulators_initial_thetas(robot_si, robot_lg, vi,
                                                                     robot_si_interface, robot_lg_interface)
     

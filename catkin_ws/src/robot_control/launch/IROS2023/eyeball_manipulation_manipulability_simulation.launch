@@ -1,6 +1,6 @@
 <launch>
 <node pkg="tele_control" type="store_node_manipulability.py" name="store"/>
-<node pkg="rosilo_datalogger" type="rosilo_datalogger_node.py" name="rosilo_datalogger"/>
+<node pkg="sas_datalogger" type="sas_datalogger_node.py" name="sas_datalogger"/>
 
 <node pkg="tele_control" type="orbital_manipulation_icra_manipulability_simulation.py" name="eyeball_manipulability"/>
 

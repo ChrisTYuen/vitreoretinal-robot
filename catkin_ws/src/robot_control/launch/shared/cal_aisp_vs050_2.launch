@@ -1,5 +1,5 @@
 <launch>
-<node pkg="sas_robot_driver" type="sas_robot_driver_ros_composer_node" name="arm2">
+<node pkg="sas_robot_driver" type="sas_robot_driver_ros_composer_node" name="arm2" output="screen">
 <rosparam file="$(find robot_control)/cfg/cal_aisp_vs050_2.yaml" command="load"/>
 <!-- Use Enviroment Variable -->
 <rosparam subst_value="true">

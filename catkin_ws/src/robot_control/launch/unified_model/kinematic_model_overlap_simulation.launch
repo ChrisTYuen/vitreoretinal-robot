@@ -1,6 +1,6 @@
 <launch>
 <node pkg="ophthalmic_control" type="store_node_for_kinematic_model_sim.py" name="store"/>
-<node pkg="rosilo_datalogger" type="rosilo_datalogger_node.py" name="rosilo_datalogger"/>
+<node pkg="sas_datalogger" type="sas_datalogger_node.py" name="sas_datalogger"/>
 
 <node pkg="ophthalmic_control" type="autonomous_positioning.py" name="autonomous_positioning_sim"/>
 

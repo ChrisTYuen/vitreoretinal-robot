@@ -1,0 +1,8 @@
+<launch>
+    <node pkg="microscopic_image_capture_simple" type="microscopic_image_capture_simple_node" name="microscopic_image_capture_simple"/>
+    <!-- <node pkg="robot_control" type="record_starter.sh" name="recording_manager"/> -->
+    <node pkg="robot_control"
+      type="arduino_contact_reporter_node.py" name="arduino_contact_reporter" output="screen"> 
+        <rosparam file="$(find robot_control)/cfg/arduino/arduino_contact_reporter.yaml" command="load"/>
+    </node>
+</launch>

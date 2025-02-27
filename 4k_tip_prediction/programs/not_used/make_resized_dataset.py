@@ -18,11 +18,11 @@ DEVICE = 'cuda'
 preprocessing_fn = smp.encoders.get_preprocessing_fn(ENCODER, ENCODER_WEIGHTS)
 preprocessing = functions.get_preprocessing(preprocessing_fn)
 
-resize_size = 256
+output_size = 256
 predict_size = 512
 margin = 50
 
-ratio_predict = predict_size/resize_size
+ratio_predict = predict_size/output_size
 
 
 def get_tip_position(img, predict_size):
@@ -65,10 +65,10 @@ while k < len(raw_images_ids):
     center = (tip_instrument+point_instrument+tip_shadow)/3
 
     max_dis = max_distance(tip_instrument, point_instrument, tip_shadow, center)
-    if max_dis+margin <= resize_size/2:
+    if max_dis+margin <= output_size/2:
         print("not_resized")
-        left_top = center - np.array([resize_size / 2, resize_size / 2])
-        right_bottom = center + np.array([resize_size / 2, resize_size / 2])
+        left_top = center - np.array([output_size / 2, output_size / 2])
+        right_bottom = center + np.array([output_size / 2, output_size / 2])
         left_top = left_top.astype('uint64')
         right_bottom = right_bottom.astype('uint64')
         # cv2.circle(image, (left_top[1], left_top[0]), 10, (255, 0, 0), -1)
@@ -88,10 +88,10 @@ while k < len(raw_images_ids):
         mask1 = mask1[left_top[0]:right_bottom[0], left_top[1]:right_bottom[1]]
         mask2 = mask2[left_top[0]:right_bottom[0], left_top[1]:right_bottom[1]]
         mask3 = mask3[left_top[0]:right_bottom[0], left_top[1]:right_bottom[1]]
-        image = cv2.resize(image, (resize_size, resize_size))
-        mask1 = cv2.resize(mask1, (resize_size, resize_size))
-        mask2 = cv2.resize(mask2, (resize_size, resize_size))
-        mask3 = cv2.resize(mask3, (resize_size, resize_size))
+        image = cv2.resize(image, (output_size, output_size))
+        mask1 = cv2.resize(mask1, (output_size, output_size))
+        mask2 = cv2.resize(mask2, (output_size, output_size))
+        mask3 = cv2.resize(mask3, (output_size, output_size))
 
     cv2.imwrite(output_dir + train_val_test + str(k) + '.png', image)
     cv2.imwrite(output_dir + train_val_test_mask + str(k) + '-1.png', mask1)

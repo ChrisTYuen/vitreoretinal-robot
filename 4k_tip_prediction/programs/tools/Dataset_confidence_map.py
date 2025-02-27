@@ -3,9 +3,16 @@ import cv2
 import numpy as np
 from torch.utils.data import Dataset as BaseDataset
 
+import sys
+sys.path.append('/home/yuki/Documents/MyProjects/4k_tip_prediction/programs/tools')
+from Parameters import Parameters
+
 
 class Dataset(BaseDataset):
-    CLASSES = ['tip_instrument', 'tip_shadow', 'tip_another_instrument']
+    if Parameters.train_other_point:
+        CLASSES = ['tip_instrument', 'tip_shadow', 'tip_another_instrument']
+    else:
+        CLASSES = ['tip_instrument', 'tip_shadow']
 
     def __init__(self, images_dir, masks_dir, image_size, classes=None, augmentation=None, preprocessing=None):
         self.ids = os.listdir(images_dir)
@@ -25,13 +32,16 @@ class Dataset(BaseDataset):
         # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         mask1 = cv2.imread(self.masks_dir + '/' + str(i+1) + '-1.png', 0)
         mask2 = cv2.imread(self.masks_dir + '/' + str(i+1) + '-2.png', 0)
-        mask3 = cv2.imread(self.masks_dir + '/' + str(i+1) + '-3.png', 0)
+        if Parameters.train_other_point:
+            mask3 = cv2.imread(self.masks_dir + '/' + str(i+1) + '-3.png', 0)
 
         # extract certain classes from mask (e.g. cars)
-        masks = np.zeros([np.shape(mask1)[0], np.shape(mask1)[1], 3])
+        num_channels = len(self.CLASSES)
+        masks = np.zeros([np.shape(mask1)[0], np.shape(mask1)[1], num_channels])
         masks[:, :, 0] = mask1/255
         masks[:, :, 1] = mask2/255
-        masks[:, :, 2] = mask3/255
+        if Parameters.train_other_point:
+            masks[:, :, 2] = mask3/255
         mask = cv2.resize(masks, (wr, hr))
 
         # apply augmentations

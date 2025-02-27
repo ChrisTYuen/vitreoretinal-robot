@@ -1,5 +1,5 @@
-# Import files from rosilo library
-from rosilo_datalogger.msg import AddValueMsg
+# Import files from SAS library
+from sas_datalogger.msg import AddValueMsg
 import numpy as np
 import img_parameters
 

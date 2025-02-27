@@ -1,5 +1,5 @@
 <launch>
-<node pkg="sas_robot_driver" type="sas_robot_driver_ros_composer_node" name="forceps">
+<node pkg="sas_robot_driver" type="sas_robot_driver_ros_composer_node" name="forceps" output="screen">
 <rosparam file="$(find robot_control)/cfg/sim_forceps_attachment_robot.yaml" command="load"/>
 <!-- Use Enviroment Variable -->
 <rosparam subst_value="true">

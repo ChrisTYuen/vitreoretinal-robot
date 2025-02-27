@@ -13,6 +13,9 @@ import rospy
 
 
 def eyeball_manipulation_test():
+    """
+    This script tests the eyeball manipulation.
+    """
     try:
         rospy.init_node("eyeball_rotation_test", disable_signals=False)
 

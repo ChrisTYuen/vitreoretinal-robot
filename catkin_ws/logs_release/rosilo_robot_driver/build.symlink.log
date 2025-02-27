@@ -1,5 +1,0 @@
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/share/rosilo_robot_driver/cmake/rosilo_robot_driverConfig.cmake
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/share/rosilo_robot_driver/cmake/rosilo_robot_driverConfig-version.cmake
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/librosilo_robot_driver.so
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/pkgconfig/rosilo_robot_driver.pc
-Symlinking /home/yuki/git/ctyuen2022/catkin_ws/devel_release/lib/python3/dist-packages/rosilo_robot_driver/__init__.py

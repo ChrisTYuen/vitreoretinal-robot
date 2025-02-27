@@ -1,1 +1,0 @@
-/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_robot_kinematics/share/rosilo_robot_kinematics/cmake/rosilo_robot_kinematicsConfig-version.cmake

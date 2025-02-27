@@ -6,7 +6,7 @@ from tools import img_parameters
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
-from rosilo_datalogger.msg import AddValueMsg
+from sas_datalogger.msg import AddValueMsg
 from std_msgs.msg import Bool
 from std_msgs.msg import String
 
@@ -22,6 +22,9 @@ def main():
 
 
 class GetPositioningPoints:
+    """
+    This class is used to get the 5 positioning points from the image. 
+    """
     def __init__(self):
         self.parameters = img_parameters.ImageParameters
         self.image_debug = self.parameters.image_debug
@@ -71,48 +74,19 @@ class GetPositioningPoints:
 
     def _img_show_callback(self, msg):
         overview_image = self.bridge_to_cv2(msg, "bgr8")
-
         self.lock_or_not = rospy.get_param("/target_lock")
 
-        image_cut_out_1, top, left = self.cut_out_image(overview_image, 1)
-        hsvMaskOpening_1 = self.hsvExtraction(image_cut_out_1)
-        point_contours = self.get_contours(hsvMaskOpening_1)
-        if not self.lock_or_not:
-            self.centers[0, :], self.radius[0, 0] = self.get_center_and_radius_of_specified_point(point_contours,
-                                                                                                  image_cut_out_1,
-                                                                                                  top, left, 1)
+        cut_out_images = []
 
-        image_cut_out_2, top, left = self.cut_out_image(overview_image, 2)
-        hsvMaskOpening_2 = self.hsvExtraction(image_cut_out_2)
-        point_contours = self.get_contours(hsvMaskOpening_2)
-        if not self.lock_or_not:
-            self.centers[1, :], self.radius[1, 0] = self.get_center_and_radius_of_specified_point(point_contours,
-                                                                                                  image_cut_out_2,
-                                                                                                  top, left, 2)
-
-        image_cut_out_3, top, left = self.cut_out_image(overview_image, 3)
-        hsvMaskOpening_3 = self.hsvExtraction(image_cut_out_3)
-        point_contours = self.get_contours(hsvMaskOpening_3)
-        if not self.lock_or_not:
-            self.centers[2, :], self.radius[2, 0] = self.get_center_and_radius_of_specified_point(point_contours,
-                                                                                                  image_cut_out_3,
-                                                                                                  top, left, 3)
-
-        image_cut_out_4, top, left = self.cut_out_image(overview_image, 4)
-        hsvMaskOpening_4 = self.hsvExtraction(image_cut_out_4)
-        point_contours = self.get_contours(hsvMaskOpening_4)
-        if not self.lock_or_not:
-            self.centers[3, :], self.radius[3, 0] = self.get_center_and_radius_of_specified_point(point_contours,
-                                                                                                  image_cut_out_4,
-                                                                                                  top, left, 4)
-
-        image_cut_out_5, top, left = self.cut_out_image(overview_image, 5)
-        hsvMaskOpening_5 = self.hsvExtraction(image_cut_out_5)
-        point_contours = self.get_contours(hsvMaskOpening_5)
-        if not self.lock_or_not:
-            self.centers[4, :], self.radius[4, 0] = self.get_center_and_radius_of_specified_point(point_contours,
-                                                                                                  image_cut_out_5,
-                                                                                                  top, left, 5)
+        for i in range(5):
+            image_cut_out, top, left = self.cut_out_image(overview_image, i + 1)
+            cut_out_images.append(image_cut_out)
+            hsvMaskOpening = self.hsvExtraction(image_cut_out)
+            point_contours = self.get_contours(hsvMaskOpening)
+            if not self.lock_or_not:
+                self.centers[i, :], self.radius[i, 0] = self.get_center_and_radius_of_specified_point(point_contours,
+                                                                                                    image_cut_out,
+                                                                                                    top, left, i + 1)
 
         center_and_radius = np.vstack([self.centers.reshape([2*self.num_of_points, 1]),
                                        self.radius.reshape([self.num_of_points, 1])])
@@ -125,44 +99,9 @@ class GetPositioningPoints:
             self.count = 0
 
             if self.image_debug:
-                cv2.imshow('image_cut_out_1', image_cut_out_1)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('image_cut_out_2', image_cut_out_2)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('image_cut_out_3', image_cut_out_3)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('image_cut_out_4', image_cut_out_4)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('image_cut_out_5', image_cut_out_5)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('HSV_mask_opening_1', hsvMaskOpening_1)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('HSV_mask_opening_2', hsvMaskOpening_2)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('HSV_mask_opening_3', hsvMaskOpening_3)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('HSV_mask_opening_4', hsvMaskOpening_4)
-                cv2.waitKey(1)
-
-            if self.image_debug:
-                cv2.imshow('HSV_mask_opening_5', hsvMaskOpening_5)
-                cv2.waitKey(1)
+                for i in range(5):
+                    cv2.imshow(f'image_cut_out_{i}', cut_out_images[i])
+                    cv2.waitKey(1)
         else:
             self.count = self.count + 1
 
@@ -290,31 +229,25 @@ class GetPositioningPoints:
         return center, radius
 
     def get_points_in_order(self, centers, radius):
-        centers_array = np.zeros([len(centers), 2])
-        center_index_array = np.ones([self.num_of_points])*(-1)
-        centers_in_order = np.zeros([self.num_of_points, 2])
-        radius_in_order = np.zeros([self.num_of_points, 1])
-        for i in range(len(centers)):
-            centers_array[i][0] = centers[i][0]
-            centers_array[i][1] = centers[i][1]
+        num_of_points = len(centers) 
+        centers_array = np.array(centers)
+        center_index_array = np.full(num_of_points, -1, dtype=int)
 
+        # Assigning indices based on the minimum and maximum values
         center_index_array[0] = np.argmin(centers_array[:, 1])
         center_index_array[1] = np.argmin(centers_array[:, 0])
         center_index_array[3] = np.argmax(centers_array[:, 0])
         center_index_array[4] = np.argmax(centers_array[:, 1])
         center_index_array[2] = np.argmin(center_index_array)
 
-        centers_in_order[0] = self.set_center(centers[int(center_index_array[0])], 0)
-        centers_in_order[1] = self.set_center(centers[int(center_index_array[1])], 1)
-        centers_in_order[2] = self.set_center(centers[int(center_index_array[2])], 2)
-        centers_in_order[3] = self.set_center(centers[int(center_index_array[3])], 3)
-        centers_in_order[4] = self.set_center(centers[int(center_index_array[4])], 4)
+        centers_in_order = np.zeros([num_of_points, 2])
+        radius_in_order = np.zeros([num_of_points, 1])
 
-        radius_in_order[0] = radius[int(center_index_array[0])]
-        radius_in_order[1] = radius[int(center_index_array[1])]
-        radius_in_order[2] = radius[int(center_index_array[2])]
-        radius_in_order[3] = radius[int(center_index_array[3])]
-        radius_in_order[4] = radius[int(center_index_array[4])]
+        # Loop through the center_index_array to assign values to centers_in_order and radius_in_order
+        for i in range(num_of_points):
+            index = int(center_index_array[i])
+            centers_in_order[i] = self.set_center(centers[index], i)
+            radius_in_order[i] = radius[index]
 
         return centers_in_order*self.ratio, radius_in_order*self.ratio
 
@@ -333,37 +266,19 @@ class GetPositioningPoints:
 
     def cut_out_image(self, image, point):
         image_shape = image.shape
-        top = 0
-        left = 0
-        bottom = image_shape[0]
-        right = image_shape[1]
-        if point == 1:
-            top = 0
-            bottom = int(image_shape[0]*3 / 8)
-            left = int(image_shape[1]/5)
-            right = int(image_shape[1]*4/5)
-        elif point == 2:
-            top = 0
-            bottom = int(image_shape[0])
-            left = int(image_shape[1] / 5)
-            right = int(image_shape[1]*2 / 5)
-        elif point == 3:
-            top = int(image_shape[0] / 3)
-            bottom = int(image_shape[0] * 2 / 3)
-            left = int(image_shape[1] / 3)
-            right = int(image_shape[1] * 2 / 3)
-        elif point == 4:
-            top = 0
-            bottom = int(image_shape[0])
-            left = int(image_shape[1]*5 / 8)
-            right = int(image_shape[1]*4/4)
-        elif point == 5:
-            top = int(image_shape[0]*5 / 8)
-            bottom = int(image_shape[0])
-            left = int(image_shape[1]/5)
-            right = int(image_shape[1]*3/5)
+        # Default values for the entire image
+        coordinates = [
+            (0, int(image_shape[0]*3/8), int(image_shape[1]/5), int(image_shape[1]*4/5)),  # Point 1
+            (0, image_shape[0], int(image_shape[1]/5), int(image_shape[1]*2/5)),  # Point 2
+            (int(image_shape[0]/3), int(image_shape[0]*2/3), int(image_shape[1]/3), int(image_shape[1]*2/3)),  # Point 3
+            (0, image_shape[0], int(image_shape[1]*5/8), image_shape[1]),  # Point 4
+            (int(image_shape[0]*5/8), image_shape[0], int(image_shape[1]/5), int(image_shape[1]*3/5))  # Point 5
+        ]
 
-        image_cut_out = image[top: bottom, left: right]
+        # Adjust the index to match the point numbering starting from 1
+        top, bottom, left, right = coordinates[point - 1]
+
+        image_cut_out = image[top:bottom, left:right]
 
         return image_cut_out, top, left
 

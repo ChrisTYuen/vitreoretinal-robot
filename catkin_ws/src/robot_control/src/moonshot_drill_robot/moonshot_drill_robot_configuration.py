@@ -13,7 +13,7 @@ struct MoonshotDrillRobotConfiguration
 
     int thread_sampling_time_nsec;
 
-    rosilo::RobotDriverDensoConfiguration robot_driver_denso_configuration;
+    sas::RobotDriverDensoConfiguration robot_driver_denso_configuration;
 };
 """
 

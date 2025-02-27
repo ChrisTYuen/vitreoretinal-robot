@@ -1,5 +1,5 @@
-# Import files from rosilo library
-from rosilo_datalogger.msg import AddValueMsg
+# Import files from SAS library
+from sas_datalogger.msg import AddValueMsg
 from std_msgs.msg import Bool
 from std_msgs.msg import String
 import numpy as np
@@ -11,7 +11,11 @@ import rospy
 
 class PositioningPointInterface:
     """
-
+    This class is used to interface with the positioning points and instrument tip positions. The target points are retrieved from the
+    predict/positioning_points topic and the instrument tip positions are retrieved from the predict/tip_positions topic. The class publishes
+    the lock status of the target points to the predict/lock_or_not topic. When unlocked, the desired points are open for detection. The 
+    class also publishes the current step to the predict/current_step. The translation and planar errors are calculated and published to the
+    predict/planar_error topic. The class also calculates the workspace of the instrument tip and the target points.
     """
     def __init__(self, converter_per_mm):
         self.subscriber_output_image_ = rospy.Subscriber("predict/positioning_points", AddValueMsg, self._positioning_points_callback)
@@ -28,16 +32,9 @@ class PositioningPointInterface:
 
     def _positioning_points_callback(self, msg):
         if not self.point_lock:
-            self.point_center[0][0] = msg.value[0]
-            self.point_center[0][1] = msg.value[1]
-            self.point_center[1][0] = msg.value[2]
-            self.point_center[1][1] = msg.value[3]
-            self.point_center[2][0] = msg.value[4]
-            self.point_center[2][1] = msg.value[5]
-            self.point_center[3][0] = msg.value[6]
-            self.point_center[3][1] = msg.value[7]
-            self.point_center[4][0] = msg.value[8]
-            self.point_center[4][1] = msg.value[9]
+            for i in range(5):                                # 5 points          
+                self.point_center[i][0] = msg.value[2*i]      # x-coordinate
+                self.point_center[i][1] = msg.value[2*i + 1]  # y-coordinate
 
     def lock_desired_point(self):
         self.point_lock = True
@@ -50,33 +47,27 @@ class PositioningPointInterface:
         rospy.set_param("/target_lock", False)
 
     def publish_current_step(self, step_num):
-        if step_num == 0:
-            rospy.set_param("/step", "Waiting")
-            self.publisher_current_step_.publish("Waiting")
-        elif step_num == 1:
-            rospy.set_param("/step", "Planar positioning")
-            self.publisher_current_step_.publish("Planar positioning")
-        elif step_num == 2:
-            rospy.set_param("/step", "Overlap prevention")
-            self.publisher_current_step_.publish("Overlap prevention")
-        elif step_num == 3:
-            rospy.set_param("/step", "Vertical positioning")
-            self.publisher_current_step_.publish("Vertical positioning")
-        elif step_num == 4:
-            rospy.set_param("/step", "Pause")
-            self.publisher_current_step_.publish("Pause")
-        elif step_num == 5:
-            rospy.set_param("/step", "Additional positioning")
-            self.publisher_current_step_.publish("Additional positioning")
-        elif step_num == 6:
-            rospy.set_param("/step", "Returning")
-            self.publisher_current_step_.publish("Returning")
+        step_messages = {
+            0: "Waiting",
+            1: "Planar positioning",
+            2: "Overlap prevention",
+            3: "Vertical positioning",
+            4: "Pause",
+            5: "Additional positioning",
+            6: "Returning"
+        }
+
+        # Set the parameter and publish the message based on step_num
+        message = step_messages.get(step_num, "Unknown Step")
+        rospy.set_param("/step", message)
+        self.publisher_current_step_.publish(message)
 
     def _tip_positions_callback(self, msg):
         self.instrument_tip[0][0] = msg.value[6]
         self.instrument_tip[0][1] = msg.value[7]
 
     def get_translation_error(self, target_pixel, velocity, tau):
+        print("instrument tip: ", self.instrument_tip)
         error = (target_pixel - self.instrument_tip[0, :])/self.converter_per_mm*10**(-3)
         error = error[0]*i_ - error[1]*j_
         trajectory_length = np.linalg.norm(vec4(error))
@@ -84,6 +75,7 @@ class PositioningPointInterface:
         return error, total_iteration
 
     def get_planar_error(self, target_pixel):
+        print("instrument tip: ", self.instrument_tip)
         planar_error = np.linalg.norm(target_pixel - self.instrument_tip[0, :])
         msg = AddValueMsg(value=np.array([planar_error]))
         self.publisher_planar_error_.publish(msg)

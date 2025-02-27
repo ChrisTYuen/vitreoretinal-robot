@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="robot_control" type="keypoint_predict_node.py" name="predict_keypoint" output="screen" />
+</launch>

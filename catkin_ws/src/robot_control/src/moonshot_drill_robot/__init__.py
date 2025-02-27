@@ -8,8 +8,8 @@ import math
 import time
 
 import rospy
-# from rosilo_robot_driver_denso import rosilo_robot_driver_denso
-from rosilo_robot_driver import RobotDriverProvider
+# from sas_robot_driver_denso import sas_robot_driver_denso
+from sas_robot_driver import RobotDriverProvider
 from .moonshot_drill_robot_configuration import MoonshotDrillRobotConfiguration
 from .MoonshotDrillVrepRobot import MoonshotDrillVrepRobot
 

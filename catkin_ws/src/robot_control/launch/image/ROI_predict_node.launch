@@ -1,0 +1,3 @@
+<launch>
+    <node pkg="robot_control" type="ROI_predict_node.py" name="predict_ROI" output="screen" />
+</launch>

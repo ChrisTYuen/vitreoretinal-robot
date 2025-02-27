@@ -1,0 +1,27 @@
+<launch>
+    <arg name="debugger" default="false"/>
+
+    <node pkg="robot_control" type="get_positioning_points.py" name="get_positioning_points" output="screen"/>
+
+    <node pkg="robot_control"
+      type="arduino_contact_reporter_node.py" name="arduino_contact_reporter" output="screen"> 
+        <rosparam file="$(find robot_control)/cfg/arduino/arduino_contact_reporter.yaml" command="load"/>
+    </node>
+
+    <group if="$(arg debugger)">
+    <node pkg="microscopic_image_capture" type="microscopic_image_capture_node" name="microscopic_image_capture" output="screen"
+          launch-prefix="sudo -E env LD_LIBRARY_PATH=$LD_LIBRARY_PATH gdb --args">
+    </node>
+    </group>
+    <group unless="$(arg debugger)">
+        <node pkg="microscopic_image_capture" type="microscopic_image_capture_node" name="microscopic_image_capture" output="screen"/>
+    </group>
+
+
+    <include file="$(find robot_control)/launch/image/ROI_predict_node.launch" />
+    <include file="$(find robot_control)/launch/image/keypoint_predict_node.launch" />
+
+    <!--<node pkg="robot_control" type="img_show_node.py" name="img_show"/>-->
+
+    <node pkg="robot_control" type="record_starter.sh" name="recording_manager" output="screen"/>
+</launch>

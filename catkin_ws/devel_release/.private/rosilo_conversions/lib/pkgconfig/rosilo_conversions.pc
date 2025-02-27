@@ -1,8 +1,0 @@
-prefix=/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_conversions
-
-Name: rosilo_conversions
-Description: Description of rosilo_conversions
-Version: 0.0.0
-Cflags: -I/home/yuki/git/ctyuen2022/catkin_ws/src/rosilo/rosilo_conversions/include
-Libs: -L${prefix}/lib -lrosilo_conversions
-Requires: geometry_msgs roscpp std_msgs

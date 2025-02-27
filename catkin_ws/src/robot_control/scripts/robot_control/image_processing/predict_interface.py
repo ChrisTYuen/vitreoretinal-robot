@@ -1,8 +1,8 @@
 from dqrobotics import *
 import numpy as np
 import rospy
-from ophthalmic_control.msg import ImgShowMsg
-from rosilo_datalogger import DataloggerInterface
+from robot_control.msg import ImgShowMsg
+from sas_datalogger import DataloggerInterface
 
 
 class PredictInterface:

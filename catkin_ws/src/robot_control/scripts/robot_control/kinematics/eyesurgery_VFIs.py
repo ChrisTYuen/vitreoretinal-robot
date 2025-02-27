@@ -1,6 +1,7 @@
 # Import Relevant files from dqrobotics
 from dqrobotics import *
 from dqrobotics.robot_modeling import DQ_Kinematics
+from dqrobotics.utils import DQ_Geometry
 
 # Import other dependencies
 import numpy as np
@@ -489,7 +490,7 @@ class EyesurgeryVFIs:
         return d
 
     @staticmethod
-    def get_second_task_distance_jacobian(Jt_1, Jt_2, Jr_1, t_1, t_2, r_1):
+    def get_second_task_distance_jacobian(Jt_1, Jt_2, Jr_1, t_1, t_2, r_1, jointx_comb):
         """
         - get_second_task_distance_jacobian(Jt_1, Jt_2, Jr_1, t_1, t_2, r_1) returns the task Jacobian "J" that relates
         the joint velocities (delta_thetas) to the time derivative of the second task distance.
@@ -513,7 +514,7 @@ class EyesurgeryVFIs:
         J_n = crossmatrix4(k_).T @ (haminus4(k_ * conj(r_1)) + hamiplus4(r_1 * k_) @ C_4) @ Jr_1
         J_1 = unit_plane_normal.T @ Jt_1 + vec4(t_R2_R1) @ u_1 @ J_n
         J_2 = -unit_plane_normal.T @ Jt_2
-        J = np.hstack([J_1, J_2]).reshape([1, 13])
+        J = np.hstack([J_1, J_2]).reshape([1, jointx_comb])
         return J
 
     @staticmethod
@@ -591,6 +592,56 @@ class EyesurgeryVFIs:
         J_2 = -2 * vec4(t_2 - t_1) @ Jt_2
         J = np.hstack([J_1, J_2]).reshape([1, jointx_1 + jointx_2])
         return J
+    
+    @staticmethod
+    def get_shaft_to_eyeball_normal_angle_error(x, r_eye, A_safe_forceps):
+        """
+        - get_shaft_to_eyeball_normal_angle_error(x, r_eye, A_safe_forceps) returns the error "A_error" between 
+        the safe angle (A_safe_forceps) and the angle between the top face of the surgical instrument (forceps) 
+        and the direction of the eyeball's normal. 
+        """
+        # Calculate the rotations of the instruments
+        r_1 = rotation(x)
+
+        # Calculate the Plucker line direction that corresponds to the upper face of the surgical instrument's shaft
+        lx_1 = r_1 * i_ * conj(r_1)
+
+        # Get the direction of the eyeball's normal
+        l_eye = normalize(r_eye * k_ * conj(r_eye))
+
+        # Calculate the angle between the top face of the surgical instrument and the direction of the eyeball's normal
+        A_forceps = DQ_Geometry.line_to_line_angle(lx_1, l_eye)
+
+        # Calculate the error
+        A_error = A_safe_forceps - A_forceps
+        return A_error
+
+
+    @staticmethod
+    def get_shaft_to_eyeball_normal_jacobian(x, Jx, r_eye):
+        """
+        - get_shaft_to_eyeball_normal_jacobian(x, Jx, r_eye) returns the Jacobian "J" that relates to the angle between 
+        the top face of the surgical instrument (forceps) and the direction of the eyeball's normal.
+        - This function is used to enforce the forceps rotation constraint to the eyeball's surface.
+        """
+        # Calculate the rotations and the translations of the instruments
+        r_1 = rotation(x)
+        t_1 = translation(x)
+
+        # Calculate the Plucker line that corresponds to the upper face of the surgical instrument's shaft
+        lx_1 = r_1 * i_ * conj(r_1)
+        mx_1 = cross(t_1, lx_1)
+        lx_dq = lx_1 + E_ * mx_1
+        
+        # Get the direction of the eyeball's normal
+        l_eye = normalize(r_eye * k_ * conj(r_eye))
+
+        # Calculate the line-to-line angle Jacobian
+        Jlz = DQ_Kinematics.line_jacobian(Jx, x, i_)
+        J = DQ_Kinematics.line_to_line_angle_jacobian(Jlz, lx_dq, l_eye)
+        return J
+        
+
 
     @classmethod
     def get_vitreoretinal_VFIs_for_one_manipulator(cls, manipulator, theta, rcm_t, eyeball_t, parameter):
@@ -606,48 +657,40 @@ class EyesurgeryVFIs:
         jointx_min = theta.size - 1
         x_jxx = manipulator.raw_fkm(theta, jointx_min)
     
-        # print(3)
         J = manipulator.pose_jacobian(theta)
         J_jxx = manipulator.raw_pose_jacobian(theta, jointx_min)
         Jt = DQ_Kinematics.translation_jacobian(J, x)
         Jt_jxx = manipulator.translation_jacobian(J_jxx, x_jxx)
-        # print(3)
 
         # Calculate Jacobians for safety constraints
         J_l_rcm = cls.get_shaft_to_rcm_distance_jacobian(x, J, rcm_t)
         J_p_eyeball = cls.get_light_tip_to_eyeball_distance_jacobian(x, Jt, eyeball_t)
         J_theta_limit = cls.get_joint_limit_jacobian(jointx)
         J_view = cls.get_robot_to_view_distance_jacobian(x_jxx, Jt_jxx, eyeball_t)
-        # print(J_view)
 
-        # print(3)
         # Calculate distances for safety constraints
         D_rcm_error = cls.get_shaft_to_rcm_distance_error(x, rcm_t, parameter.D_safe_rcm)
         D_eyeball_error = cls.get_light_tip_to_eyeball_distance_error(x, eyeball_t, parameter.D_safe_eyeball)
-        # print(3)
 
         d_theta_limit = cls.get_joint_limit_distance([parameter.theta_limit_minu[0, 0: jointx]], [parameter.theta_limit_plu[0, 0: jointx]], theta)
         D_view_error = cls.get_robot_to_view_distance_error(x_jxx, eyeball_t, parameter.D_safe_view)
 
-        # print(3.1)
         # Store them in arrays
         W = np.vstack([J_l_rcm,
                        J_p_eyeball,
                        J_theta_limit,
                        -1 * J_view,
                        ])
-        # print(3.2)
         w = np.vstack([parameter.nd_rcm * D_rcm_error,
                        parameter.nd_eyeball * D_eyeball_error,
                        parameter.nd_limit * d_theta_limit,
                        -1 * parameter.nd_view * D_view_error,
                        ])
-        # print(3)
         return W, w
 
     @classmethod 
     def get_vitreoretinal_VFIs(cls, robot_si, robot_lg, theta_si, theta_lg, rcm_si, rcm_lg,
-                               eyeball_t, parameter, constrained_planes_si, constrained_planes_lg):
+                               eyeball_t, parameter, constrained_planes_si, constrained_planes_lg, r_eye):
         """
         - get_vitreoretinal_VFIs_for_two_manipulator(cls, robot_si, robot_lg, theta_si, theta_lg, rcm_si, rcm_lg,
         eyeball_t, constrained_planes_si, constrained_planes_lg, parameter) returns the array of Jacobians "W" and
@@ -691,6 +734,7 @@ class EyesurgeryVFIs:
         J_view_lg = cls.get_robot_to_view_distance_jacobian(x_lg_jxx, Jt_lg_jxx, eyeball_t)
         J_plane_si = cls.get_robot_to_constrained_planes_distance_jacobian(theta_si, robot_si, constrained_planes_si)
         J_plane_lg = cls.get_robot_to_constrained_planes_distance_jacobian(theta_lg, robot_lg, constrained_planes_lg)
+        J_forceps = cls.get_shaft_to_eyeball_normal_jacobian(x_si, J_si, r_eye)
 
         # Calculate distances for Vitreoretinal Task Constraints---Section VIII of Koyama et al. (2022)
         D_rcm_error_si = cls.get_shaft_to_rcm_distance_error(x_si, rcm_si, parameter.D_safe_rcm)
@@ -701,42 +745,11 @@ class EyesurgeryVFIs:
         D_collision_error = cls.get_light_tip_to_instrument_shaft_distance_error(x_si, x_lg, parameter.D_safe_collision)
         d_theta_limit_si = cls.get_joint_limit_distance(parameter.theta_limit_minu[0, 0: jointx_si], parameter.theta_limit_plu[0, 0: jointx_si], theta_si)
         d_theta_limit_lg = cls.get_joint_limit_distance(parameter.theta_limit_minu[0, 0: jointx_lg], parameter.theta_limit_plu[0, 0: jointx_lg], theta_lg)
-        # print("d_theta_limit_si", d_theta_limit_si)
-        # print("d_theta_limit_lg", d_theta_limit_lg)
-        # print("parameter.theta_limit_minu[0, 0: jointx_si]", parameter.theta_limit_minu[0, 0: jointx_si])
-        # print("parameter.theta_limit_plu[0, 0: jointx_si]", parameter.theta_limit_plu[0, 0: jointx_si])
-        # print("parameter.theta_limit_minu[0, 0: jointx_lg]", parameter.theta_limit_minu[0, 0: jointx_lg])
-        # print("parameter.theta_limit_plu[0, 0: jointx_lg]", parameter.theta_limit_plu[0, 0: jointx_lg])
         D_view_error_si = cls.get_robot_to_view_distance_error(x_si_jxx, eyeball_t, parameter.D_safe_view)
         D_view_error_lg = cls.get_robot_to_view_distance_error(x_lg_jxx, eyeball_t, parameter.D_safe_view)
         D_plane_si = cls.get_robot_to_constrained_planes_distance(theta_si, robot_si, constrained_planes_lg)
         D_plane_lg = cls.get_robot_to_constrained_planes_distance(theta_lg, robot_lg, constrained_planes_si)
-        # print("W_shape")
-        # print("1", np.shape(np.hstack([J_l_rcm_si, np.zeros([1, jointx_lg])]) * parameter.rcm_si))
-        # print("2", np.shape(np.hstack([np.zeros([1, jointx_si]), J_l_rcm_lg]) * parameter.rcm_lg))
-        # print("3", np.shape(np.hstack([np.zeros([1, jointx_si]), -1 * J_collision]) * parameter.collision))
-        # print("4", np.shape(np.hstack([np.zeros([1, jointx_si]), J_p_eyeball]) * parameter.eyeball))
-        # print("5", np.shape(np.hstack([J_theta_limit_si, np.zeros([(2 * jointx_si), jointx_lg])])))
-        # print("6", np.shape(np.hstack([np.zeros([(2 * jointx_lg), jointx_si]), J_theta_limit_lg])))
-        # print("7", np.shape(np.hstack([-1 * J_trocar_si, np.zeros([1, jointx_lg])]) * parameter.trocar_si))
-        # print("8", np.shape(np.hstack([np.zeros([1, jointx_si]), -1 * J_trocar_lg]) * parameter.trocar_lg))
-        # print("9", np.shape(np.hstack([-1 * J_view_si, np.zeros([1, jointx_lg])]) * parameter.view))
-        # print("10", np.shape(np.hstack([np.zeros([1, jointx_lg]), -1 * J_view_si]) * parameter.view))
-        # print("11", np.shape(np.hstack([-1 * J_plane_si, np.zeros([J_plane_si.shape[0], jointx_lg])]) * parameter.plane))
-        # print("12", np.shape(np.hstack([-1 * np.zeros([J_plane_lg.shape[0], jointx_si]), J_plane_lg]) * parameter.plane))
-        # print("w_shape")
-        # print("1", np.shape(np.array([parameter.nd_rcm * D_rcm_error_si]) * parameter.rcm_si))
-        # print("2", np.shape(np.array([parameter.nd_rcm * D_rcm_error_lg]) * parameter.rcm_lg))
-        # print("3", np.shape(np.array([-1 * parameter.nd_collision * D_collision_error]) * parameter.collision))
-        # print("4", np.shape(np.array([parameter.nd_eyeball * D_eyeball_error]) * parameter.eyeball))
-        # print("5", np.shape(parameter.nd_limit * d_theta_limit_si))
-        # print("6", np.shape(parameter.nd_limit * d_theta_limit_lg))
-        # print("7", np.shape(np.array([parameter.nd_trocar * D_trocar_si]) * parameter.trocar_si))
-        # print("8", np.shape(np.array([parameter.nd_trocar * D_trocar_lg]) * parameter.trocar_lg))
-        # print("9", np.shape(np.array([-1 * parameter.nd_view * D_view_error_si]) * parameter.view))
-        # print("10", np.shape(np.array([-1 * parameter.nd_view * D_view_error_lg]) * parameter.view))
-        # print("11", np.shape(parameter.nd_plane * D_plane_si * parameter.plane))
-        # print("12", np.shape(parameter.nd_plane * D_plane_lg * parameter.plane))
+        D_forceps_angle = cls.get_shaft_to_eyeball_normal_angle_error(x_si, r_eye, parameter.A_safe_forceps)
 
         # Store them in arrays
         W = np.vstack([np.hstack([J_l_rcm_si, np.zeros([1, jointx_lg])]) * parameter.rcm_si,
@@ -751,6 +764,7 @@ class EyesurgeryVFIs:
                        np.hstack([np.zeros([1, jointx_si]), -1 * J_view_lg]) * parameter.view,
                        np.hstack([-1 * J_plane_si, np.zeros([J_plane_si.shape[0], jointx_lg])]) * parameter.plane,
                        np.hstack([-1 * np.zeros([J_plane_lg.shape[0], jointx_si]), J_plane_lg]) * parameter.plane,
+                       np.hstack([J_forceps, np.zeros([1, jointx_lg])]) * parameter.forceps,
                        ])
         w = np.vstack([np.array([parameter.nd_rcm * D_rcm_error_si]) * parameter.rcm_si,
                        np.array([parameter.nd_rcm * D_rcm_error_lg]) * parameter.rcm_lg,
@@ -764,8 +778,8 @@ class EyesurgeryVFIs:
                        np.array([-1 * parameter.nd_view * D_view_error_lg]) * parameter.view,
                        parameter.nd_plane * D_plane_si * parameter.plane,
                        parameter.nd_plane * D_plane_lg * parameter.plane,
+                       np.array([parameter.nd_forceps * D_forceps_angle]) * parameter.forceps,
                        ])
-        # print("Vitro VFI's calculated")
 
         return W, w
 
@@ -834,7 +848,6 @@ class EyesurgeryVFIs:
         if p_a_si == 0:
             p_a_si = parameter.ws_radius / 100
         p_R2_e = p_lg_c + (parameter.ws_radius / np.linalg.norm(vec4(p_a_si))) * p_a_si
-        # print(6)
 
         # Get Calculate Jacobians for Shadow-based Positioning Constraints---Section IX of Koyama et al. (2022)
         J_shadow_cone = cls.point_to_cone_jacobian(Jt_si, Jt_lg, parameter.ws_radius, t_lg_si, p_lg_c, p_R2_e,
@@ -842,25 +855,21 @@ class EyesurgeryVFIs:
         J_illumination_cone = cls.point_to_illumination_jacobian(r_lg, Jr_lg, lz_lg, t_lg_si, parameter.gamma, Jt_si,
                                                                  Jt_lg)
         J_tip = cls.get_tip_to_tip_distance_jacobian(Jt_si, Jt_lg, t_si, t_lg, jointx_si, jointx_lg)
-        # print(6)
 
         # Get Calculate distances for Shadow-based Positioning Constraints---Section IX of Koyama et al. (2022)
         d_shadow_cone = cls.point_to_cone_signed_distance(p_R2_e, p_lg_c, t_lg_si)
         d_illumination_cone = cls.point_to_illumination_signed_distance(lz_lg, t_lg_si, parameter.gamma)
         D_tip = cls.get_tip_to_tip_distance_error(x_lg, t_si, parameter.D_safe_tip)
-        # print(6)
 
         # Store them in arrays
         W = np.vstack([-1 * J_shadow_cone * 10 ** 10 * parameter.shadow_cone,
                        -1 * J_illumination_cone * parameter.illumination_cone,
                        -1 * J_tip * parameter.tip
                        ])
-        # print(6)
         w = np.vstack([np.array([parameter.nd_cone * d_shadow_cone * 10 ** 10]) * parameter.shadow_cone,
                        np.array([parameter.nd_illumination * d_illumination_cone]) * parameter.illumination_cone,
                        np.array([parameter.nd_tip * D_tip]) * parameter.tip
                        ])
-        # print("Conical VFI's calculated")
         return W, w
 
     @classmethod

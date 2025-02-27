@@ -1,1 +1,0 @@
-/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/robot_control/lib/python3/dist-packages/robot_control/msg/_ImgShowMsg.py

@@ -8,13 +8,14 @@ from dqrobotics.robot_modeling import DQ_Kinematics
 from sas_robot_driver import RobotDriverInterface
 from sas_robot_kinematics import RobotKinematicsProvider
 from sas_datalogger import DataloggerInterface
-from robot_loader import Robot
 from std_msgs.msg import Float64MultiArray
+from sensor_msgs.msg import JointState
 
 # Original
 from kinematics.eyesurgery_VFIs import EyesurgeryVFIs as EyeVFI
 import kinematics.kinematics_functions as kine_func
 from tools import functions
+from tools.robot_loader import Robot
 from eyeball import eyeball
 from eyeball.eyeball_parameter import eyeball_parameter
 from kinematics.parameters import physical_parameters, control_parameters
@@ -22,16 +23,24 @@ from interfaces import store_interface
 from haptic_forceps_controller import ForcepsController
 from eyesurgery_controllers import EyesurgeryControllers
 from kinematics.orbital_manipulation_kinematics import OrbitalManipulationKinematics as om_kinematics
+from positioning_helper_functions import PositioningHelper as pos_help
 
 # Some libraries for calculations
 import numpy as np
 import time
 import math
+import traceback
 
 # ROS
 import rospy
 
 def tele_operation():
+    """
+    This script performs teleoperation of the surgical instruments using the proposed control method. The RCM positions must be set
+    within the eye model before this script is to be run. The light guide can be controlled manually or automatically. The orbital 
+    manipulation can be enabled or disabled. The surgical instrument can be controlled with or without end-effector rotation. 
+    CPLEX is the recommended solver for this script.
+    """
     try:
         rospy.init_node("tele_controller", disable_signals=True)
         print("[" + rospy.get_name() + "]:: Start kinematics...")
@@ -51,7 +60,6 @@ def tele_operation():
         controller = EyesurgeryControllers()
         forceps = ForcepsController()
 
-
         # Define robots: denso_robot_light : left hand, denso_robot_instrument with attachment: right hand
         robot_si = Robot(setup.robot_parameter_path_instrument).kinematics()
         robot_lg = Robot(setup.robot_parameter_path_light).kinematics()
@@ -59,15 +67,20 @@ def tele_operation():
 
         if functions.is_physical_robot():
             input("[" + rospy.get_name() + "]:: Start tele_operation with physical robots. OK?\n")
-            forceps_control = forceps.haptic_forceps_setup(setup)
-            forceps_control.initialize()
-            pub_forceps_si_closure = rospy.Publisher('escon_1/set/target_joint_positions', Float64MultiArray, queue_size=10)
+            if parameter.forceps_control:
+                forceps_control = forceps.haptic_forceps_setup(setup)
+                forceps_control.initialize()
+                pub_volt_forceps_si = rospy.Publisher('escon_1/set/target_joint_forces', Float64MultiArray, queue_size=10)
+                pub_pos_forceps_si = rospy.Publisher('escon_1/set/target_joint_positions', Float64MultiArray, queue_size=10)
+                rospy.Subscriber('escon_1/get/joint_states', JointState, ForcepsController.joint_state_callback)
+
+
         else:
             print("[" + rospy.get_name() + "]:: Start tele_operation in simulation.\n")
         
         # Set the end_effector positions
         robot_si.set_effector(setup.robot_si_effector_dq)
-        robot_lg.set_effector(setup.robot_lg_effector_dq)
+        robot_lg.set_effector(setup.robot_lg_effector_dq) 
 
         # Define Solver
         if parameter.solver == 0:
@@ -115,15 +128,16 @@ def tele_operation():
         print("[" + rospy.get_name() + "]:: Calculated rcm positions from the tip positions!")
         time.sleep(.5)
 
+        # Calculate the eyeball position based on the rcm positions and create an Eyeball object
         eyeball_dq = kine_func.get_eyeball_position_from_rcm(rcm_si_dq, rcm_lg_dq, parameter.eyeball_radius, parameter.port_angle)
         eye = eyeball.Eyeball(eyeball_dq, rcm_si_dq, rcm_lg_dq, eye_parameter)
-        eyeball_variables = np.vstack(
+        eyeball_variables = np.vstack(  # Store eyeball parameters
             [vec4(eye.rcm_si_t).reshape([4, 1]), vec4(eye.rcm_lg_t).reshape([4, 1]), vec4(eye.ws_t).reshape([4, 1]),
-             vec4(eye.eyeball_t).reshape([4, 1])
-             ]
-        )
+             vec4(eye.eyeball_t).reshape([4, 1])])
         store.send_store_data("eyeball_variables", eyeball_variables)
         time.sleep(.5)
+
+        # Set the eyeball position and workspace position in Vrep
         vi.set_object_pose(sim_setup.eyeball_vrep_name, eyeball_dq)
         vi.set_object_translation(sim_setup.workspace_vrep_name, eye.ws_t)
 
@@ -131,18 +145,15 @@ def tele_operation():
             input("[" + rospy.get_name() + "]:: Push Enter to move the tool-tips to the start positions...\n")
         else:
             print("[" + rospy.get_name() + "]:: Move the tool-tips to the start positions...\n")
-        # print(1)
 
         controller.translation_controller_with_rcm_constraint(robot_si, robot_si_interface, parameter.td_init_set_si,
                                                               eye.rcm_si_t, eye.eyeball_t,
                                                               sim_setup.si_vrep_name, vi)
 
-        # print(1)
         controller.translation_controller_with_rcm_constraint(robot_lg, robot_lg_interface, parameter.td_init_set_lg,
                                                               eye.rcm_lg_t, eye.eyeball_t,
                                                               sim_setup.lg_vrep_name, vi)
 
-        # print(1)
         if not EyeVFI.constraints_are_satisfied(robot_si, robot_lg, robot_si_interface, robot_lg_interface, eye, parameter):
             print("--------------------------------------------------")
             input("[" + rospy.get_name() + "]:: Positioning was quit.")
@@ -157,9 +168,38 @@ def tele_operation():
 
         theta_si = robot_si_interface.get_joint_positions()
         theta_lg = robot_lg_interface.get_joint_positions()
+        forceps_grasp_joint_states = np.zeros(3)
 
+        # Get initial poses and translations after the instruments are inserted into an eyeball model
         x_si = robot_si.fkm(theta_si)
         x_lg = robot_lg.fkm(theta_lg)
+        t_si = translation(x_si)
+        t_lg = translation(x_lg)
+        r_si = rotation(x_si)
+        r_lg = rotation(x_lg)
+        axis = k_
+        l_si = normalize(r_si * axis * conj(r_si))
+        l_lg = normalize(r_lg * axis * conj(r_lg))
+        rcm_init_si = translation(rcm_si_dq)
+        rcm_init_lg = translation(rcm_lg_dq)
+        t_rcm_si, t_rcm_lg = om_kinematics.get_current_rcm_translations(t_si, t_lg, l_si, l_lg,
+                                                                        eye.eyeball_t, eye.eyeball_radius)
+        D_rcm_init = np.linalg.norm(vec4(t_rcm_si - t_rcm_lg)) ** 2  # D_OM
+
+        rotation_c_plane_1 = -1 * j_ + E_ * dot(eye.eyeball_t, -1 * j_)
+        rotation_c_n = k_
+        rotation_c_plane_2 = rotation_c_n + E_ * dot(eye.eyeball_t + eye.eyeball_radius / 2 * k_, rotation_c_n)
+        rotation_c_plane_list = [rotation_c_plane_1, rotation_c_plane_2]
+
+        normal1 = normalize(math.cos(np.deg2rad(parameter.theta_safe_eye_plane)) * i_ + math.sin(np.deg2rad(parameter.theta_safe_eye_plane)) * j_)
+        normal2 = normalize(-1 * math.cos(np.deg2rad(parameter.theta_safe_eye_plane)) * i_ + math.sin(np.deg2rad(parameter.theta_safe_eye_plane)) * j_)
+        rotation_c_plane_unified_1 = normal1 + E_ * dot(eye.eyeball_t, normal1)
+        rotation_c_plane_unified_2 = normal2 + E_ * dot(eye.eyeball_t, normal2)
+        rotation_c_plane_unified_list = [rotation_c_plane_unified_1, rotation_c_plane_unified_2]
+
+        [constrained_plane_list_si, constrained_plane_list_lg] = kine_func.get_constrained_plane_list(eye.eyeball_t,
+                                                                                                      setup.celling_height,
+                                                                                                      setup.floor_height)
 
         print("[" + rospy.get_name() + "]:: Waiting for RobotKinematicsProvider to be enabled...")
         while not robot_lg_provider.is_enabled() or not robot_si_provider.is_enabled():
@@ -180,35 +220,6 @@ def tele_operation():
         else:
             print("\n[" + rospy.get_name() + "]:: Starting control loop....\n")
 
-        # Parameters for orbital manipulation
-        t_si = translation(x_si)
-        t_lg = translation(x_lg)
-        r_si = rotation(x_si)
-        r_lg = rotation(x_lg)
-        axis = k_
-        l_si = normalize(r_si * axis * conj(r_si))
-        l_lg = normalize(r_lg * axis * conj(r_lg))
-        rcm_init_si = translation(rcm_si_dq)
-        rcm_init_lg = translation(rcm_lg_dq)
-        t_rcm_si, t_rcm_lg = om_kinematics.get_current_rcm_translations(t_si, t_lg, l_si, l_lg,
-                                                                        eye.eyeball_t, eye.eyeball_radius)
-        D_rcm_init = np.linalg.norm(vec4(t_rcm_si - t_rcm_lg)) ** 2
-
-        rotation_c_plane_1 = -1 * j_ + E_ * dot(eye.eyeball_t, -1 * j_)
-        rotation_c_n = k_
-        rotation_c_plane_2 = rotation_c_n + E_ * dot(eye.eyeball_t + eye.eyeball_radius / 2 * k_, rotation_c_n)
-        rotation_c_plane_list = [rotation_c_plane_1, rotation_c_plane_2]
-
-        normal1 = normalize(math.cos(np.deg2rad(parameter.theta_safe_eye_plane)) * i_ + math.sin(np.deg2rad(parameter.theta_safe_eye_plane)) * j_)
-        normal2 = normalize(-1 * math.cos(np.deg2rad(parameter.theta_safe_eye_plane)) * i_ + math.sin(np.deg2rad(parameter.theta_safe_eye_plane)) * j_)
-        rotation_c_plane_unified_1 = normal1 + E_ * dot(eye.eyeball_t, normal1)
-        rotation_c_plane_unified_2 = normal2 + E_ * dot(eye.eyeball_t, normal2)
-        rotation_c_plane_unified_list = [rotation_c_plane_unified_1, rotation_c_plane_unified_2]
-
-        [constrained_plane_list_si, constrained_plane_list_lg] = kine_func.get_constrained_plane_list(eye.eyeball_t,
-                                                                                                      setup.celling_height,
-                                                                                                      setup.floor_height)
-
         ##############################
         # Control Loop
         ##############################
@@ -222,7 +233,6 @@ def tele_operation():
             # Get target pose from V-REP
             xd_si = robot_si_provider.get_desired_pose()
             td_si = translation(xd_si)
-            # rd_si = r_si * normalize(1 - 0.05 * k_)
             rd_si = rotation(xd_si) #.normalize()
 
             if parameter.lg_automation:
@@ -230,11 +240,8 @@ def tele_operation():
             else:
                 xd_lg = robot_lg_provider.get_desired_pose()
 
-            # print(np.rad2deg(theta_si))
-
             vi.set_object_pose(sim_setup.si_xd_vrep_name, xd_si)
             vi.set_object_pose(sim_setup.lg_xd_vrep_name, xd_lg)
-            # input("[" + rospy.get_name() + "]:: Tested xd_lg object pose. Press enter to continue...\n")
 
             # Get the pose of the current tooltip pose
             x_si = robot_si.fkm(theta_si)
@@ -246,7 +253,6 @@ def tele_operation():
             t_lg = translation(x_lg)
             r_si = rotation(x_si)
             r_lg = rotation(x_lg)
-
             l_si = normalize(r_si * axis * conj(r_si))  # direction of z-axis of the instrument
             l_lg = normalize(r_lg * axis * conj(r_lg))  # direction of z-axis of the light guide
 
@@ -255,36 +261,22 @@ def tele_operation():
 
             robot_si_provider.send_pose(x_si)
             robot_lg_provider.send_pose(x_lg)
-            # input("[" + rospy.get_name() + "]:: Tested x_lg object pose. Press enter to continue...\n")
 
-            rcm_current_si, rcm_current_lg = om_kinematics.get_current_rcm_translations(t_si, t_lg, l_si, l_lg,
-                                                                                        eye.eyeball_t, eye.eyeball_radius)
-            r_o_e = om_kinematics.get_eyeball_rotation(eye.eyeball_t, eye.eyeball_radius, rcm_init_si, rcm_init_lg,
-                                                       rcm_current_si, rcm_current_lg)
+            # Get the current RCM positions, eyeball rotation and set the positions          
+            (rcm_current_si, rcm_current_lg, r_o_e 
+            ) = pos_help.calculate_and_set_rcm_positions(
+            t_si, t_lg, l_si, l_lg, eye, rcm_init_si, rcm_init_lg, om_kinematics, sim_setup, vi)
 
+            # Get the shadow tip position and set the position
             shadow_tip_dq = eye.get_shadow_tip_position(x_si, x_lg, r_o_e)
-            vi.set_object_pose(sim_setup.shadow_vrep_name, shadow_tip_dq)
-
-            vi.set_object_rotation(sim_setup.eyeball_vrep_name, r_o_e)
-            vi.set_object_translation(sim_setup.rcm_si_vrep_name, rcm_current_si)
-            vi.set_object_translation(sim_setup.rcm_lg_vrep_name, rcm_current_lg)
+            pos_help.set_tip_positions(sim_setup, vi, x_si, x_lg, shadow_tip_dq)
 
             # Get Jacobians related to the current tooltip poses
-            J_si = robot_si.pose_jacobian(theta_si)
-            Jt_si = robot_si.translation_jacobian(J_si, x_si)
-            Jr_si = DQ_Kinematics.rotation_jacobian(J_si)
-            J_lg = robot_lg.pose_jacobian(theta_lg)
-            Jt_lg = robot_lg.translation_jacobian(J_lg, x_lg)
-            Jr_lg = DQ_Kinematics.rotation_jacobian(J_lg)
-            Jl_si = (haminus4(axis * conj(r_si)) + hamiplus4(r_si * axis) @ C4()) @ Jr_si
-            Jl_lg = (haminus4(axis * conj(r_lg)) + hamiplus4(r_lg * axis) @ C4()) @ Jr_lg
-            Jr_rd_si = (haminus4(rd_si) @ C4()) @ Jr_si
-
-            # Define errors
-            td_eye = conj(r_o_e)*(td_si-eye.eyeball_t)*r_o_e                                    # Translation error of eyeball
-            e_si_t = np.array([vec4(t_si - td_si)])                                             # Translation error of instrument
-            e_si_r = np.array([vec4(kine_func.closest_invariant_rotation_error(x_si, xd_si))])  # Rotation error of instrument
-            e_lg_t = np.array([vec4(t_lg - translation(xd_lg))])
+            (J_si, Jt_si, Jr_si, Jl_si, Jr_rd_si, J_lg, Jt_lg, Jr_lg, Jl_lg
+            ) = pos_help.calculate_jacobians(robot_si, robot_lg, theta_si, theta_lg, axis, x_si, x_lg, r_si, r_lg, rd_si)
+           
+            # Calculate the errors of the eyeball and instruments
+            td_eye, e_si_t, e_si_r, e_lg_t = pos_help.calculate_errors(xd_si, xd_lg, td_si, x_si, t_si, t_lg, r_o_e, eye, kine_func)
 
             if parameter.print_error:
                 print("instrument translation error:", np.linalg.norm(e_si_t))
@@ -293,10 +285,10 @@ def tele_operation():
             # Quadratic programming (without the proposed constraints)
             W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.rcm_si_t,
                                                                eye.rcm_lg_t, eye.eyeball_t, parameter,
-                                                               constrained_plane_list_si, constrained_plane_list_lg)
-            # input("[" + rospy.get_name() + "]:: Tested vitreo VFI's. Press enter to continue...\n")
+                                                               constrained_plane_list_si, constrained_plane_list_lg, r_o_e)
+            
             W_conical, w_conical = EyeVFI.get_conical_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.ws_t, parameter)
-            # input("[" + rospy.get_name() + "]:: Tested conical VFI's. Press enter to continue...\n")
+
             if parameter.om_version_icra_ver:
                 W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(robot_si, robot_lg, theta_si,
                                                                                   theta_lg,
@@ -308,104 +300,38 @@ def tele_operation():
                                                                          eye.eyeball_t, eye.eyeball_radius, parameter,
                                                                          D_rcm_init, r_o_e, rcm_init_si, rcm_init_lg,
                                                                          rotation_c_plane_unified_list)
-            # input("[" + rospy.get_name() + "]:: Tested orbital manipulation VFI's. Press enter to continue...\n")
-            # print("W_vitreo", W_vitreo.shape,"/n", "w_vitreo", w_vitreo.shape)
-            # print("W_conical", W_conical.shape,"/n", "w_conical", w_conical.shape)
-            # print("W_om", W_om.shape, "/n", "w_om", w_om.shape)
+           
             W = np.vstack([W_vitreo,
                            W_conical,
                            W_om])
             w = np.vstack([w_vitreo,
                            w_conical,
                            w_om])
-            # print("W", W.shape, W)
-            # print("w", w.shape, w)
 
-            eye_rotation_jacobian = om_kinematics.get_eyeball_rotation_jacobian(Jt_si, Jt_lg, Jl_si, Jl_lg, t_si, t_lg,
-                                                                                l_si, l_lg, jointx_lg,
-                                                                                rcm_current_si, rcm_current_lg,
-                                                                                eye.eyeball_t, eye.eyeball_radius,
-                                                                                rcm_init_si, rcm_init_lg)
-
-            eyeball_jacobian_t = om_kinematics.get_eyeball_jacobian_translation(Jt_si, Jt_lg, Jl_si, Jl_lg,
-                                                                              t_si, t_lg, l_si, l_lg, jointx_lg,
-                                                                              rcm_current_si, rcm_current_lg,
-                                                                              eye.eyeball_t, eye.eyeball_radius, rcm_init_si,
-                                                                              rcm_init_lg, td_eye)
+            # Calculate the eye jacobians
+            (eye_rotation_jacobian, eyeball_jacobian_t, eyeball_jacobian_r
+            ) = pos_help.get_eye_jacobians(Jt_si, Jt_lg, Jl_si, Jr_rd_si, Jl_lg, t_si, t_lg, l_si, l_lg, rcm_current_si, rcm_current_lg, 
+                                           eye, rcm_init_si, rcm_init_lg, td_eye, jointx_si, jointx_lg, om_kinematics)
             
-            eyeball_jacobian_r = (np.hstack([Jr_rd_si, np.zeros([4, jointx_lg])]))
-
-            if parameter.end_effector_rotation:
-            # Quadratic coefficients of the decision variables
-                A1 = parameter.alpha * eyeball_jacobian_t.T @ eyeball_jacobian_t
-                A2 = (1 - parameter.alpha) * eyeball_jacobian_r.T @ eyeball_jacobian_r
-                H1 = parameter.beta * (A1 + A2)                                                   # instrument
-                A3 = np.vstack([np.zeros([4, jointx_comb]),
-                                np.hstack([np.zeros([4, jointx_si]), Jt_lg])])
-                H2 = (1 - parameter.beta) * A3.T @ A3                                             # light guide
-                H3 = parameter.eyeball_damping * eye_rotation_jacobian.T @ eye_rotation_jacobian  # orbital manipulation
-                H = 2 * ((H1 + H2 + H3) + parameter.damping * parameter.B_13)
-                # print("eyeball_jacobian_t", eyeball_jacobian_t.shape, eyeball_jacobian_t)
-                # print("eyeball_jacobian_r", eyeball_jacobian_r.shape, eyeball_jacobian_r)
-                # print("A1", A1.shape, A1)
-                # print("A2", A2.shape, A2)
-                # # print("H1", H1.shape, H1)
-                # print("A3", A3.shape, A3)
-                # # print("H2", H2.shape, H2)
-                # # print("H3", H3.shape, H3)
-                # print("H", H.shape, H)
-
-                # Linear coefficients of the decision variables
-                A4 = parameter.alpha * eyeball_jacobian_t.T @ e_si_t.T
-                A5 = (1 - parameter.alpha) * eyeball_jacobian_r.T @ e_si_r.T
-                c1 = parameter.beta * parameter.n * (A4 + A5)  # instrument
-                A6 = np.vstack([np.zeros([jointx_si, 1]),
-                                Jt_lg.T @ e_lg_t.T])
-                c2 = (1 - parameter.beta) * parameter.n * A6   # light guide
-                c = 2 * (c1 + c2)
-                # print("e_si_t", e_si_t.shape, e_si_t)
-                # print("e_si_r", e_si_r.shape, e_si_r)
-                # # print("A4", A4.shape, A4)
-                # # print("A5", A5.shape, A5)
-                # print("c1", c1.shape, c1)
-                # # print("A6", A6.shape, A6)
-                # print("c2", c2.shape, c2)
-                # print("c", c.shape, c)
-            else:
-                H1 = parameter.beta * eyeball_jacobian_t.T @ eyeball_jacobian_t                   # instrument
-                A1 = np.vstack([np.zeros([4, jointx_comb]),                             
-                                np.hstack([np.zeros([4, jointx_si]), Jt_lg])])
-                H2 = (1 - parameter.beta) * A1.T @ A1                                             # light guide
-                H3 = parameter.eyeball_damping * eye_rotation_jacobian.T @ eye_rotation_jacobian  # orbital manipulation
-                H = 2 * ((H1 + H2 + H3) + parameter.damping * parameter.B_13)
-
-                c1 = parameter.beta * parameter.n * (eyeball_jacobian_t.T @ e_si_t.T)
-                A2 = np.vstack([np.zeros([jointx_si, 1]),     # instrument
-                                Jt_lg.T @ e_lg_t.T])
-                c2 = (1 - parameter.beta) * parameter.n * A2  # light guide
-                c = 2 * (c1 + c2)
+            # Calculate the decision variables
+            H, c = pos_help.decision_variable_calculation(eyeball_jacobian_t, eyeball_jacobian_r, eye_rotation_jacobian, Jt_lg, e_si_t, 
+                                                          e_lg_t, e_si_r, jointx_comb, jointx_si, parameter.n, parameter.damping, parameter)
 
             if parameter.solver == 0:
                 w = w.reshape(w.shape[0])
                 c = c.reshape(jointx_comb)
 
             delta_thetas = qp_solver.solve_quadratic_program(H, c, W, w, np.zeros([1, jointx_comb]), np.zeros([1, 1]))
-            # print(9)
 
-            theta_si = theta_si + delta_thetas[:jointx_si] * parameter.tau
-            theta_lg = theta_lg + delta_thetas[jointx_si:jointx_comb] * parameter.tau
-            theta_si.reshape([jointx_si, 1])
-            theta_lg.reshape([jointx_lg, 1])
-            # print(10)
-
-            # Set joint position
-            robot_si_interface.send_target_joint_positions(theta_si)
-            robot_lg_interface.send_target_joint_positions(theta_lg)
-            # input("[" + rospy.get_name() + "]:: Tested theta_lg target joint_positions. Press enter to continue...\n")
-
-            # # Control the end effector
-            # if functions.is_physical_robot():
-            #     forceps.forceps_manipulation(haptic_pose_si, pub_forceps_si_closure)
+            # Update the theta joint positions and send the target joint positions to the robots
+            theta_si, theta_lg = pos_help.update_joint_positions(theta_si, theta_lg, delta_thetas, jointx_comb, 
+                                                                 robot_si_interface, robot_lg_interface, parameter)
+            
+            # Control the opening and closure of foceps
+            if functions.is_physical_robot() and parameter.forceps_control and ForcepsController.joint_state_msg is not None:
+                haptic_pose_si = forceps_control.send_tool_pose()
+                forceps.forceps_manipulation(haptic_pose_si, ForcepsController.joint_state_msg, pub_volt_forceps_si, pub_pos_forceps_si)
+                forceps_grasp_joint_states = ForcepsController.joint_state_msg.position[0:3]
 
             ##################################
             # Logging
@@ -433,7 +359,7 @@ def tele_operation():
 
             store_data = np.hstack(
                 [theta_si.T, theta_lg.T, delta_thetas, vec8(x_si), vec8(x_lg), vec8(td_si),
-                 vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e)])
+                 vec4(rcm_current_si), vec4(rcm_current_lg), vec4(r_o_e), forceps_grasp_joint_states])
             store.send_store_data("kinematics", store_data)
 
             if parameter.enable_sleep:
@@ -446,6 +372,9 @@ def tele_operation():
 
     except Exception as exp:
         print("[" + rospy.get_name() + "]:: {}.".format(exp))
+        traceback.print_exc()
+        print("please check the error message above.")
+
     except KeyboardInterrupt:
         print("Keyboard Interrupt!!")
 

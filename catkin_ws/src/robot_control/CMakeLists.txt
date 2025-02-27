@@ -8,8 +8,8 @@ project(robot_control)
 file(GLOB_RECURSE EXTRA_FILES */*)
 add_custom_target(${PROJECT_NAME}_OTHER_FILES ALL WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} SOURCES ${EXTRA_FILES})
 
-## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++14)
+## Compile as C++17, supported in ROS Kinetic and newer
+set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Werror=return-type)
 
 ## Find catkin macros and libraries
@@ -18,12 +18,6 @@ add_compile_options(-Werror=return-type)
 find_package(catkin REQUIRED COMPONENTS
     roscpp
     rospy
-    rosilo_datalogger
-    rosilo_conversions
-    rosilo_clock
-    rosilo_robot_driver
-    rosilo_robot_driver_denso
-    rosilo_robot_kinematics
     sas_operator_side_receiver
     sensor_msgs
     std_msgs
@@ -67,6 +61,7 @@ add_message_files(
   FILES
   ImgShowMsg.msg
   ROI.msg
+  CImage.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -102,7 +97,7 @@ generate_messages(
 catkin_package(
     #INCLUDE_DIRS include
     #LIBRARIES cobotta_kinematics
-    CATKIN_DEPENDS rosilo_robot_kinematics rosilo_robot_driver rosilo_robot_driver_denso rosilo_conversions rosilo_clock roscpp rosilo_datalogger sas_robot_driver_denso sas_operator_side_receiver sas_robot_driver sas_common sas_conversions sas_clock roscpp sas_datalogger sas_operator_side_receiver
+    CATKIN_DEPENDS sas_robot_driver_denso sas_operator_side_receiver sas_robot_driver sas_common sas_conversions sas_clock roscpp sas_datalogger sas_operator_side_receiver message_runtime std_msgs
     #  DEPENDS system_lib
     )
 

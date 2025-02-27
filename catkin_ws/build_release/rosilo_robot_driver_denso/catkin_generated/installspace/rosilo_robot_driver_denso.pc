@@ -1,8 +1,0 @@
-prefix=/home/yuki/git/ctyuen2022/catkin_ws/install_release
-
-Name: rosilo_robot_driver_denso
-Description: Description of rosilo_robot_driver_denso
-Version: 0.0.0
-Cflags: -I${prefix}/include
-Libs: -L${prefix}/lib -lrosilo_robot_driver_denso
-Requires: roscpp rospy rosilo_clock rosilo_robot_driver

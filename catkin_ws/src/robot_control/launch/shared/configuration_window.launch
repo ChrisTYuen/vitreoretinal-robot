@@ -1,5 +1,5 @@
 <launch>
 
-<node pkg="sas_robot_kinematics_constrained_multiarm" type="configuration_window_node" name="configuration_window"/>
+<node pkg="sas_robot_kinematics_constrained_multiarm" type="configuration_window_node" name="configuration_window" output="screen"/>
 
 </launch>

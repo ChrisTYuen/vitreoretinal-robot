@@ -69,30 +69,24 @@ class EyesurgeryControllers:
                 J = robot.pose_jacobian(theta)
                 Jt = DQ_Kinematics.translation_jacobian(J, x)
 
-                # print(2)
                 # Quadratic programming
                 W, w = EyeVFI.get_vitreoretinal_VFIs_for_one_manipulator(robot, theta, rcm_t, eyeball_t, self.parameter)
 
-                # print(2)
                 e = np.array([vec4(t - td_intermediate)]).T
                 H = Jt.T @ Jt
                 C = 2 * self.parameter.n_initialize * (Jt.T @ e)
-                # print(2)
 
                 if self.parameter.solver == 0:
                     w = w.reshape(w.shape[0])
                     C = C.reshape(jointx)
-                # print(2)
 
                 delta_thetas = self.qp_solver.solve_quadratic_program(2*(H + self.parameter.damping_initialize * np.eye(jointx)), C, W, w,
                                                                       np.zeros([1, jointx]), np.zeros([1, 1]))
 
-                # print(2)
                 # Update joint position
                 theta = theta + delta_thetas * self.parameter.tau
                 theta.reshape([jointx, 1])
                 interface.send_target_joint_positions(theta)
-                # print(2.1)
 
                 # Show the updated position of the instrument's tip in the simulation
                 x = robot.fkm(theta)
@@ -102,7 +96,6 @@ class EyesurgeryControllers:
                     r.sleep()
                 if self.parameter.print_time:
                     print(time.time()-start)
-                # print(2.2)
 
             # Show how accurate the controller could move the instrument
             print("The error of " + vrep_instrument_name + " is " + str(
@@ -187,7 +180,7 @@ class EyesurgeryControllers:
             # Quadratic programming
             W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.rcm_si_t,
                                                                eye.rcm_lg_t, eye.eyeball_t, self.parameter,
-                                                               constrained_plane_list_si, constrained_plane_list_lg)
+                                                               constrained_plane_list_si, constrained_plane_list_lg, r_o_e)
             if self.parameter.om_version_icra_ver:
                 W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(robot_si, robot_lg, theta_si,
                                                                                   theta_lg,
@@ -313,7 +306,7 @@ class EyesurgeryControllers:
             # Quadratic programming
             W_vitreo, w_vitreo = EyeVFI.get_vitreoretinal_VFIs(robot_si, robot_lg, theta_si, theta_lg, eye.rcm_si_t,
                                                                eye.rcm_lg_t, eye.eyeball_t, self.parameter,
-                                                               constrained_plane_list_si, constrained_plane_list_lg)
+                                                               constrained_plane_list_si, constrained_plane_list_lg, r_o_e)
             if self.parameter.om_version_icra_ver:
                 W_om, w_om = om_kinematics.get_orbital_manipulation_VFIs_icra2023(robot_si, robot_lg, theta_si,
                                                                                   theta_lg,
@@ -479,21 +472,6 @@ class EyesurgeryControllers:
                                                                      self.setup.insertion_distance, rcm_si_dq)
                 td_lg, rd_lg = kine_func.get_initial_pose_in_eyeball(eyeball_position, self.parameter.eyeball_radius,
                                                                      self.setup.insertion_distance, rcm_lg_dq)
-                
-                ####################DEBUGGGGGGGGGGGGGGGGGGGGGGGGGGGG#########################################
-                # x_int = robot_si.fkm(theta_si)
-                # y_int = robot_lg.fkm(theta_lg)
-                # vi.set_object_pose("Test_effector_pose1", x_int)
-                # vi.set_object_pose("Test_effector_pose2", y_int)
-                # t_int = translation(x_int)
-                # print("current t is:", t_int)
-                # print("desired t is:", td_si)
-                # print("tau is:", self.parameter.tau)
-                # total_iteration = kine_func.get_p2p_iteration(t_int, td_si, self.parameter.tau, self.sim_setup.initialize_velocity_sim)
-                # print("total iterations:", total_iteration)
-                # print("initial td_si, rd_si", td_si, rd_si)
-                # input("[" + rospy.get_name() + "]:: Testing. OK? Press enter to continue...\n")
-                ####################DEBUGGGGGGGGGGGGGGGGGGGGGGGGGGGG#########################################
 
                 # Calculate the number of iterations needed to move the instrument's tip to the desired pose at a constant velocity
                 theta_si = self.pose_controller(theta_si, td_si, rd_si, robot_si, si_interface, vi, self.sim_setup.si_vrep_name,
@@ -529,7 +507,6 @@ class EyesurgeryControllers:
             t = translation(x)
             r = rotation(x)
 
-            ################################TEST################################################3333
             vi.set_object_pose(vrep_instrument_name, x)
             Jx = robot.pose_jacobian(theta)
 
@@ -590,90 +567,17 @@ class EyesurgeryControllers:
             w = np.hstack([
                 w,
             ])
-            # def check_number_type1(my_array: List[Union[int, float]], index: int) -> None:
-            #     try:
-            #         number = my_array[index]
-            #         print(f'Type of {number}: {type(number)}')
-            #     except IndexError:
-            #         print('Invalid index provided.')
-            # def check_number_type(nested_array: List[List[Union[int, float]]], outer_index: int,
-            #                       inner_index: int) -> None:
-            #     try:
-            #         number = nested_array[outer_index][inner_index]
-            #         print(f'Type of {number}: {type(number)}')
-            #     except IndexError:
-            #         print('Invalid indices provided.')
-            # print("H", check_number_type(H, 1, 1))
-            # print("C", check_number_type1(C, 1))
-            # print("W", check_number_type(W, 1, 1))
-            # print("w", check_number_type1(w, 1))
-            # # exit()
 
             u = self.qp_solver.solve_quadratic_program(2*H, C, np.zeros([1, jointx]), np.zeros([1, 1]),
                                                                   np.zeros([1, jointx]), np.zeros([1, 1]))
-            # u = self.qp_solver.solve_quadratic_program(H, C, W, w,
-            #                                           np.zeros([1, jointx]), np.zeros([1, 1]))
 
             theta = theta + u * self.parameter.tau
 
             robot_interface.send_target_joint_positions(theta) 
 
-
-
-
-
-            ####################################TEST#################################################
-            # vi.set_object_pose("x1", robot.fkm(theta))
-            
-
-            # robot_interface.send_target_joint_positions(theta)
-            # vi.set_object_pose(vrep_instrument_name, x)
-
-            # # Get Jacobians
-            # J = robot.pose_jacobian(theta)
-            # Jt = DQ_Kinematics.translation_jacobian(J, x)
-            # Jr = haminus4(rd) @ C4() @ DQ_Kinematics.rotation_jacobian(J)
-
-            # # Quadratic programming
-            # # theta_limit_minu_joint = self.parameter.theta_limit_minu[0, 0: jointx]
-            # # theta_limit_plu_joint = self.parameter.theta_limit_plu[0, 0: jointx]
-            # # J_theta_limit = EyeVFI.get_joint_limit_jacobian(jointx)
-            # # d_theta_limit = EyeVFI.get_joint_limit_distance(theta_limit_minu_joint,
-            # #                                                 theta_limit_plu_joint, theta)
-         
-            # # W = J_theta_limit
-            # # w = self.parameter.nd_limit * d_theta_limit
-
-            # e_t = np.array([vec4(t - td)]).T
-            # e_r = kine_func.closest_invariant_rotation_error(r, rd)
-            # e_r = np.array([vec4(e_r)]).T
-
-            # H_t = Jt.T @ Jt
-            # C_t = 2 * 1 * (Jt.T @ e_t)
-            # H_r = Jr.T @ Jr
-            # C_r = 2 * 10 * (Jr.T @ e_r)
-
-            # # if self.parameter.solver == 0:
-            # #     w = w.reshape(w.shape[0])         # #     C_t = C_t.reshape(jointx)
-            # #     C_r = C_r.reshape(jointx)
-
-            # # H = self.parameter.control_priority * H_t + (1 - self.parameter.control_priority) * H_r + 0.001 * np.eye(jointx)
-            # # C = self.parameter.control_priority * C_t + (1 - self.parameter.control_priority) * C_r
-            # H = 1 * H_t + 0.001 * np.eye(jointx)
-            # C = 1 * C_t 
-
-            # delta_thetas = self.qp_solver.solve_quadratic_program(2*H, C, np.zeros([1, 7]), np.zeros([1, 1]),
-            #                                                       np.zeros([1, 7]), np.zeros([1, 1]))
-
-            # # Update joint position
-            # theta = theta + delta_thetas * tau
-            # theta.reshape([7, 1])
-
             if self.parameter.enable_sleep:
                 rate.sleep()
-            # for i in range(jointx):
-            #     vi.set_object_pose("fkm" + str(i), robot.fkm(theta, i))
-
+    
         # Show how accurate the initialization of the surgical instrument was performed
         x = robot.fkm(theta)
         t = translation(x)

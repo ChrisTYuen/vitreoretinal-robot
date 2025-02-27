@@ -1,7 +1,0 @@
-set(rosilo_conversions_SETUP_PY_SETUP_MODULE "distutils.core")
-set(rosilo_conversions_SETUP_PY_VERSION "0.0.0")
-set(rosilo_conversions_SETUP_PY_SCRIPTS "")
-set(rosilo_conversions_SETUP_PY_PACKAGES "rosilo_conversions")
-set(rosilo_conversions_SETUP_PY_PACKAGE_DIRS "src/rosilo_conversions")
-set(rosilo_conversions_SETUP_PY_MODULES "")
-set(rosilo_conversions_SETUP_PY_MODULE_DIRS "")

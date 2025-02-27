@@ -1,5 +1,5 @@
 <launch>
-<node pkg="sas_robot_driver_denso" type="sas_robot_driver_denso_node" name="vs050_2">
+<node pkg="sas_robot_driver_denso" type="sas_robot_driver_denso_node" name="vs050_2" output="screen">
 <rosparam file="$(find robot_control)/cfg/sas_robot_driver_6dof_denso_vs050_2.yaml" command="load"/>
 </node>
 </launch>

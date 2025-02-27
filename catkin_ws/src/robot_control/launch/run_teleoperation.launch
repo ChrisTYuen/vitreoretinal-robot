@@ -2,12 +2,10 @@
 
 <include file="$(find robot_control)/launch/shared/sas_operator_side_receiver.launch"/>
 <include file="$(find robot_control)/launch/shared/sas_patient_side_manager.launch"/>
-<!-- <include file="$(find robot_control)/launch/shared/sas_robot_kinematics_constrained_multiarm.launch"/> -->
 
-<!-- <include file="$(find robot_control)/launch/shared/configuration_window.launch"/> -->
+<node pkg="robot_control" type="tele_operation_unified.py" name="tele_controller" output="screen"/>
 
-<node pkg="robot_control" type="store_node_unified_tele.py" name="store"/>
-<node pkg="robot_control" type="tele_operation_unified.py" name="tele_controller"/>
-<node pkg="sas_datalogger" type="sas_datalogger_node.py" name="sas_datalogger"/>
+<node pkg="sas_datalogger" type="sas_datalogger_node.py" name="sas_datalogger" output="screen"/>
+<node pkg="robot_control" type="store_node_unified_tele.py" name="store" output="screen"/>
 
 </launch>

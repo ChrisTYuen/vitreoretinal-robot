@@ -11,6 +11,7 @@ def extract_frames():
     """
     parameters = Parameters.Parameters()
     ids = os.listdir(parameters.video_path)
+    ids.reverse()
     print(ids)
 
     frame_interval = parameters.frame_interval

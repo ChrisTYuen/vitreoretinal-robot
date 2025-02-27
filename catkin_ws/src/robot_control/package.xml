@@ -51,16 +51,10 @@
   <buildtool_depend>catkin</buildtool_depend>
 
   <build_depend>message_generation</build_depend>
-  <build_depend>rosilo_robot_kinematics</build_depend>
-  <build_depend>rosilo_robot_driver</build_depend>
-  <build_depend>rosilo_robot_driver_denso</build_depend>
-  <build_depend>rosilo_conversions</build_depend>
-  <build_depend>rosilo_clock</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>sensor_msgs</build_depend>
-  <build_depend>rosilo_datalogger</build_depend>
   <build_depend>sas_operator_side_receiver</build_depend>
   
   <build_depend>sas_robot_kinematics</build_depend>
@@ -73,14 +67,8 @@
   <build_depend>sas_operator_side_receiver</build_depend>
 <!--  <build_depend>sas_patient_side_manager</build_depend>-->
 
-  <build_export_depend>rosilo_robot_kinematics</build_export_depend>
-  <build_export_depend>rosilo_robot_driver</build_export_depend>
-  <build_export_depend>rosilo_robot_driver_denso</build_export_depend>
-  <build_export_depend>rosilo_conversions</build_export_depend>
-  <build_export_depend>rosilo_clock</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>rospy</build_export_depend>
-  <build_export_depend>rosilo_datalogger</build_export_depend>
   <build_export_depend>sas_operator_side_receiver</build_export_depend>
   
   <build_export_depend>sas_robot_kinematics</build_export_depend>
@@ -94,16 +82,10 @@
 <!--  <build_export_depend>sas_patient_side_manager</build_export_depend>-->
 
   <exec_depend>message_runtime</exec_depend>
-  <exec_depend>rosilo_robot_kinematics</exec_depend>
-  <exec_depend>rosilo_robot_driver</exec_depend>
-  <exec_depend>rosilo_robot_driver_denso</exec_depend>
-  <exec_depend>rosilo_conversions</exec_depend>
-  <exec_depend>rosilo_clock</exec_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>rospy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>rosilo_datalogger</exec_depend>
   <exec_depend>sas_operator_side_receiver</exec_depend>
   
   <exec_depend>sas_robot_kinematics</exec_depend>

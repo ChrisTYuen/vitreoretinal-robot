@@ -1,7 +1,7 @@
 import rospy
 
 """
-This file contains some functions that help you to  
+This file checks if the robot is physically used in real life or through simulation.
 """
 
 

@@ -16,7 +16,8 @@ class OrbitalManipulationKinematics:
     @classmethod
     def get_current_inserted_length(cls, t, l, t_eye, eye_radius):
         """
-
+        The distances between the tips and the RCM positions as d_i. See also Vitreoretinal Surgical Robotic System with 
+        Autonomous Orbital Manipulation using Vector-Field Inequalities described in V of Koyama et al. (2023), Equation 11.
         """
         g = np.dot(vec4(t - t_eye), vec4(l))
         c = g ** 2 + eye_radius ** 2 - (np.linalg.norm(vec4(t - t_eye))) ** 2
@@ -26,21 +27,23 @@ class OrbitalManipulationKinematics:
     @classmethod
     def get_current_inserted_length_jacobian(cls, Jt, Jl, t, l, t_eye, eye_radius):
         """
-
+        The Jacobian distance between the tips and the RCM positions as Jd_i. See also Vitreoretinal Surgical Robotic System with 
+        Autonomous Orbital Manipulation using Vector-Field Inequalities described in V of Koyama et al. (2023), Equation 18.
         """
         # d_si, d_lg (d_R1, d_R2)
         g = np.dot(vec4(t - t_eye), vec4(l))
-        h1 = math.sqrt(g ** 2 + eye_radius ** 2 - (np.linalg.norm(vec4(t - t_eye))) ** 2)
+        h1 = math.sqrt(g ** 2 + eye_radius ** 2 - (np.linalg.norm(vec4(t - t_eye))) ** 2)  # Equation 11
 
-        Jh_2 = vec4(l) @ Jt + vec4(t - t_eye) @ Jl
-        Jh_1 = 1/h1*(g*Jh_2-vec4(t - t_eye) @ Jt)
+        Jh_2 = vec4(l) @ Jt + vec4(t - t_eye) @ Jl  # Equation 16
+        Jh_1 = 1/h1*(g*Jh_2-vec4(t - t_eye) @ Jt)  # Equation 17 from 15 and 16
         J_d = Jh_1 + Jh_2
         return J_d
 
     @classmethod
     def get_current_rcm_translations(cls, t_si, t_lg, l_si, l_lg, t_eye, eye_radius):
         """
-
+        The translations of the RCM points of both instruments as t_o_i. See also Vitreoretinal Surgical Robotic System with 
+        Autonomous Orbital Manipulation using Vector-Field Inequalities described in V of Koyama et al. (2023), Equation 10.
         """
         # d_si, d_lg (d_R1, d_R2)
         d_si = cls.get_current_inserted_length(t_si, l_si, t_eye, eye_radius)
@@ -53,17 +56,19 @@ class OrbitalManipulationKinematics:
 
     @classmethod
     def get_current_rcm_translation_jacobians(cls, Jt_si, Jt_lg, Jl_si, Jl_lg, J_d_si, J_d_lg,
-                                              l_si, l_lg, d_si, d_lg):
+                                              l_si, l_lg, d_si, d_lg, jointx_si, jointx_lg):
         """
-
+        The Jacobians of the RCM translations of both instruments as Jt_o_i. See also Vitreoretinal Surgical Robotic System with 
+        Autonomous Orbital Manipulation using Vector-Field Inequalities described in V of Koyama et al. (2023), Equations 19.
         """
-        J_t_o_rcm1 = Jt_si - vec4(l_si).reshape([4, 1]) @ J_d_si.reshape([1, 7]) - d_si * Jl_si
-        J_t_o_rcm2 = Jt_lg - vec4(l_lg).reshape([4, 1]) @ J_d_lg.reshape([1, 6]) - d_lg * Jl_lg
+        J_t_o_rcm1 = Jt_si - vec4(l_si).reshape([4, 1]) @ J_d_si.reshape([1, jointx_si]) - d_si * Jl_si
+        J_t_o_rcm2 = Jt_lg - vec4(l_lg).reshape([4, 1]) @ J_d_lg.reshape([1, jointx_lg]) - d_lg * Jl_lg
         return J_t_o_rcm1, J_t_o_rcm2
 
     @staticmethod
     def get_eyeball_rotation(eyeball_center, eyeball_radius, rcm_si_init, rcm_lg_init, rcm_si_current, rcm_lg_current):
         """
+        Calculate the rotation of the eyeball by using the geometry of the eye and the RCM points.
         """
         # RCMs in the eyeball coordinate
         u_om1_init = normalize(rcm_si_init - eyeball_center)
@@ -92,9 +97,9 @@ class OrbitalManipulationKinematics:
         return r_o_e
 
     @classmethod
-    def get_eyeball_rotation_jacobian(cls, Jt_si, Jt_lg, Jl_si, Jl_lg, t_si, t_lg,
-                                      l_si, l_lg, jointx_lg, t_o_rcm1, t_o_rcm2,
-                                      t_eye, eye_radius, rcm_init_si, rcm_init_lg):
+    def get_eyeball_rotation_jacobian(cls, Jt_si, Jt_lg, Jl_si, Jl_lg,
+                                      t_si, t_lg, l_si, l_lg, t_o_rcm1, t_o_rcm2,
+                                      t_eye, eye_radius, rcm_init_si, rcm_init_lg, jointx_si, jointx_lg):
         # d_si, d_lg (d_R1, d_R2)
         d_si = cls.get_current_inserted_length(t_si, l_si, t_eye, eye_radius)
         J_d_si = cls.get_current_inserted_length_jacobian(Jt_si, Jl_si, t_si, l_si, t_eye, eye_radius)
@@ -103,7 +108,7 @@ class OrbitalManipulationKinematics:
 
         # si_rcmt, lg_rcmt (t_o_rcm1, t_o_rcm2)
         J_t_o_rcm1, J_t_o_rcm2 = cls.get_current_rcm_translation_jacobians(Jt_si, Jt_lg, Jl_si, Jl_lg, J_d_si, J_d_lg,
-                                                                           l_si, l_lg, d_si, d_lg)
+                                                                           l_si, l_lg, d_si, d_lg, jointx_si, jointx_lg)
 
         # unit vectors
         u_om1_init = normalize(rcm_init_si - t_eye)
@@ -160,16 +165,16 @@ class OrbitalManipulationKinematics:
 
     @classmethod
     def get_eyeball_jacobian_translation(cls, Jt_si, Jt_lg, Jl_si, Jl_lg,
-                                         t_si, t_lg, l_si, l_lg, jointx_lg, t_o_rcm1, t_o_rcm2,
-                                         t_eye, eye_radius, rcm_init_si, rcm_init_lg, td_eye):
+                                         t_si, t_lg, l_si, l_lg, t_o_rcm1, t_o_rcm2,
+                                         t_eye, eye_radius, rcm_init_si, rcm_init_lg, td_eye, jointx_si, jointx_lg):
         """
 
         """
         # eye rotation (r_o_e)
         r_o_e = cls.get_eyeball_rotation(t_eye, rcm_init_si, rcm_init_lg, t_o_rcm1, t_o_rcm2, eye_radius)
         J_r_o_e = cls.get_eyeball_rotation_jacobian(Jt_si, Jt_lg, Jl_si, Jl_lg, t_si, t_lg,
-                                                    l_si, l_lg, jointx_lg, t_o_rcm1, t_o_rcm2,
-                                                    t_eye, eye_radius, rcm_init_si, rcm_init_lg)
+                                                    l_si, l_lg, t_o_rcm1, t_o_rcm2,
+                                                    t_eye, eye_radius, rcm_init_si, rcm_init_lg, jointx_si, jointx_lg)
 
         # desired translation (t_o_d)
         J_t_o_d = (haminus4(td_eye*conj(r_o_e))+hamiplus4(r_o_e*td_eye)@C4())@J_r_o_e
@@ -226,6 +231,7 @@ class OrbitalManipulationKinematics:
     @classmethod
     def get_tip_to_moving_trocar_distance_error(cls, t_trocar, t_tip, D_safe_trocar):
         """
+        Distance error between the corresponding RCM and tool tip.
         """
         # Calculate the squared distance between the tip and the trocar
         D_trocar_to_tip = (np.linalg.norm(vec4(t_trocar - t_tip))) ** 2
@@ -237,6 +243,7 @@ class OrbitalManipulationKinematics:
     @classmethod
     def get_tip_to_moving_trocar_distance_jacobian(cls, Jt_trocar, Jt_tip, t_trocar, t_tip, jointx):
         """
+        Jacobian of the distance between the corresponding RCM and tool tip.
         """
         # Calculate the trocar-to-tip distance Jacobian
         J = vec4(t_trocar - t_tip) @ (Jt_trocar - Jt_tip)
@@ -278,19 +285,19 @@ class OrbitalManipulationKinematics:
 
         Jt_trocar_si, Jt_trocar_lg = cls.get_current_rcm_translation_jacobians(Jt_si, Jt_lg, Jl_si, Jl_lg,
                                                                                J_d_si, J_d_lg, l_si, l_lg,
-                                                                               d_si, d_lg)
+                                                                               d_si, d_lg, jointx_si, jointx_lg)
 
         # Get jacobians and distances for vitreoretinal environment constraints
         J_trocar_si = cls.get_tip_to_moving_trocar_distance_jacobian(Jt_trocar_si, Jt_si, t_trocar_si, t_si, jointx_si)
         J_trocar_lg = cls.get_tip_to_moving_trocar_distance_jacobian(Jt_trocar_lg, Jt_lg, t_trocar_lg, t_lg, jointx_lg)
 
-        J_D_om = 2 * vec4(t_trocar_si - t_trocar_lg) @ np.hstack([Jt_trocar_si, -1 * Jt_trocar_lg])
+        J_D_om = 2 * vec4(t_trocar_si - t_trocar_lg) @ np.hstack([Jt_trocar_si, -1 * Jt_trocar_lg])  # Equation 20
         J_rot_plane_1_si = DQ_Kinematics.point_to_plane_distance_jacobian(Jt_trocar_si, t_trocar_si, rotation_c_plane_list[0])
         J_rot_plane_1_lg = DQ_Kinematics.point_to_plane_distance_jacobian(Jt_trocar_lg, t_trocar_lg, rotation_c_plane_list[0])
         J_rot_plane_2_si = DQ_Kinematics.point_to_plane_distance_jacobian(Jt_trocar_si, t_trocar_si, rotation_c_plane_list[1])
         J_rot_plane_2_lg = DQ_Kinematics.point_to_plane_distance_jacobian(Jt_trocar_lg, t_trocar_lg, rotation_c_plane_list[1])
 
-        D_om = np.linalg.norm(vec4(t_trocar_si - t_trocar_lg)) ** 2
+        D_om = np.linalg.norm(vec4(t_trocar_si - t_trocar_lg)) ** 2  # Equation 8
         D_trocar_si = cls.get_tip_to_moving_trocar_distance_error(t_trocar_si, t_si, parameter.D_safe_trocar)
         D_trocar_lg = cls.get_tip_to_moving_trocar_distance_error(t_trocar_lg, t_lg, parameter.D_safe_trocar)
         d_rot_plane_1_si = DQ_Geometry.point_to_plane_distance(t_trocar_si, rotation_c_plane_list[0])
@@ -373,12 +380,13 @@ class OrbitalManipulationKinematics:
         J_d_lg = cls.get_current_inserted_length_jacobian(Jt_lg, Jl_lg, t_lg, l_lg, eyeball_t, eyeball_radius)
         Jt_trocar_si, Jt_trocar_lg = cls.get_current_rcm_translation_jacobians(Jt_si, Jt_lg, Jl_si, Jl_lg,
                                                                                J_d_si, J_d_lg, l_si, l_lg,
-                                                                               d_si, d_lg)
+                                                                               d_si, d_lg, jointx_si, jointx_lg)
+        # print(7)
         J_r_eye = cls.get_eyeball_rotation_jacobian(Jt_si, Jt_lg, Jl_si, Jl_lg,
-                                                    t_si, t_lg, l_si, l_lg, jointx_lg,
+                                                    t_si, t_lg, l_si, l_lg,
                                                     rcm_current_si, rcm_current_lg,
-                                                    eyeball_t, eyeball_radius, rcm_init_si, rcm_init_lg)
-        
+                                                    eyeball_t, eyeball_radius, rcm_init_si, rcm_init_lg, jointx_si, jointx_lg)
+        # print(7)
 
         # Get jacobians and distances for vitreoretinal environment constraints
         J_trocar_si = cls.get_tip_to_moving_trocar_distance_jacobian(Jt_trocar_si, Jt_si, rcm_current_si, t_si, jointx_si)

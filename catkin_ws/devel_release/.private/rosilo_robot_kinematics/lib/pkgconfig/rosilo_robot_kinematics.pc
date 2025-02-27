@@ -1,8 +1,0 @@
-prefix=/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_robot_kinematics
-
-Name: rosilo_robot_kinematics
-Description: Description of rosilo_robot_kinematics
-Version: 0.0.0
-Cflags: -I/home/yuki/git/ctyuen2022/catkin_ws/src/rosilo/rosilo_robot_kinematics/include
-Libs: -L${prefix}/lib -lrosilo_robot_kinematics
-Requires: rosilo_conversions roscpp rospy geometry_msgs

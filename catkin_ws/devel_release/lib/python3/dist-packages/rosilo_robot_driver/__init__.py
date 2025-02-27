@@ -1,1 +1,0 @@
-/home/yuki/git/ctyuen2022/catkin_ws/devel_release/.private/rosilo_robot_driver/lib/python3/dist-packages/rosilo_robot_driver/__init__.py

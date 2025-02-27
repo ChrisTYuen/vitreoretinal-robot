@@ -9,7 +9,7 @@ Python = 3.8
 
 ROS == Noetic
 
-rosilo_denso_communication  
+sas_denso_communication  
 
 pathology_robot
 
